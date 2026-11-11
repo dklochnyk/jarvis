@@ -14,7 +14,7 @@ function connect() {
 
 window.jarvis.onHotkey(() => send({ type: 'hotkey' }));
 window.jarvis.onToggleHud(() => $('hud').classList.toggle('hidden'));
-window.jarvis.onResetOrb && window.jarvis.onResetOrb(() => setPin(null));
+window.jarvis.onResetOrb && window.jarvis.onResetOrb(() => resetAllUI());
 
 // ---------- state ----------
 const COLORS = {
@@ -116,6 +116,8 @@ function handle(m) {
     case 'log': addLog(m.text); break;
     case 'timers': S.timers = m.items || []; drawTimers(); break;
     case 'error': addLog('ERROR: ' + m.text); break;
+    case 'term': termLine(m.text, m.err); break;
+    case 'termbuf': $('tlines').replaceChildren(); (m.lines || []).forEach((l) => termLine(l.text, l.err)); break;
     case 'desktop': S.wins = m.windows || []; updateCovered(); break;
     case 'launcher': buildTiles(m.items || []); break;
     case 'spotify': S.sp = { ...m, at: Date.now() }; updatePlayer(true); break;
@@ -155,7 +157,7 @@ function onStats(m) {
 }
 
 // ---------- window awareness ----------
-const PANELS = ['diag', 'log', 'timers', 'dock', 'clockbox', 'perf', 'radar'];
+const PANELS = ['diag', 'log', 'timers', 'dock', 'clockbox', 'perf', 'radar', 'term'];
 function updateCovered() {
   document.body.classList.toggle('compact', Layout.isCompact(S.wins));
   for (const id of PANELS) {
@@ -306,7 +308,8 @@ function frame(ms) {
   const wantC = Layout.isCompact(S.wins) ? 1 : 0;
   S.compact += (wantC - S.compact) * 0.07;
   const cm = S.compact * S.compact * (3 - 2 * S.compact);
-  const { x: cx, y: cy, R } = Layout.orb(W, H, cm, k, S.pin);
+  const o0 = Layout.orb(W, H, cm, k, S.pin);
+  const cx = o0.x, cy = o0.y, R = o0.R * uiScale('orb');
   orbNow.x = cx; orbNow.y = cy; orbNow.R = R;
   const speed = st === 'thinking' ? 3.2 : st === 'listening' ? 1.2 : 0.55;
 
@@ -323,10 +326,13 @@ function frame(ms) {
   const big = 1 - cm;   // how "full size" the HUD is (radar, waveform)
 
   // ---- the main stage (clear desktop only): background, hero brain, hologram platform ----
+  heroNow.on = false;
   if (big > 0.03) {
     Scenery.drawBackground(ctx, t, dt, c, big);
     drawEdgeDim(big);
-    const hR = Math.min(W * 0.17, H * 0.27), hx = W / 2, hy = H * 0.42;
+    const hu = UI.hero || {};
+    const hR = Math.min(W * 0.17, H * 0.27) * (hu.s || 1), hx = W / 2 + (hu.dx || 0), hy = H * 0.42 + (hu.dy || 0);
+    heroNow.x = hx; heroNow.y = hy; heroNow.R = hR; heroNow.on = big > 0.5;
     const ha = Math.min(1, 0.75 + 0.25 * brainAct) * big;
     const rp = hR * 0.34;                                           // platform sits just under the stem
     Scenery.drawPlatform(ctx, hx, hy + hR * 1.02 + 44 - rp * 2.95, rp, t, c, ha, lv);
@@ -416,6 +422,55 @@ function frame(ms) {
 }
 requestAnimationFrame(frame);
 
+
+// ---------- terminal panel (mirrors the console window) ----------
+function termLine(text, err) {
+  const box = $('tlines'), d = document.createElement('div');
+  d.textContent = text;
+  if (/traceback|error|exception|failed|fatal|denied|refused|invalid|unavailable|\b[45]\d\d\b/i.test(text)) d.className = 'err';
+  else if (err || /warn|deprecat|retry|stopped/i.test(text)) d.className = 'warn';
+  box.appendChild(d);
+  while (box.children.length > 60) box.removeChild(box.firstChild);
+  box.scrollTop = box.scrollHeight;
+  const n = box.querySelectorAll('.err').length, cnt = $('tcnt');
+  cnt.textContent = n ? n + (n === 1 ? ' ERROR' : ' ERRORS') : 'ALL CLEAR';
+  cnt.classList.toggle('bad', n > 0);
+}
+$('tcnt').textContent = 'ALL CLEAR';
+
+// ---------- movable / scalable panels (right-drag to move, right-hold + scroll to resize) ----------
+const MOVABLE = ['diag', 'log', 'timers', 'dock', 'clockbox', 'perf', 'radar', 'bar', 'player', 'term', 'rail'];
+let UI = {};
+try { UI = JSON.parse(localStorage.getItem('jarvis.ui')) || {}; } catch (e) { UI = {}; }
+const saveUI = () => { try { localStorage.setItem('jarvis.ui', JSON.stringify(UI)); } catch (e) { /* fine */ } };
+function uiScale(id) { return (UI[id] && UI[id].s) || 1; }
+function applyUI(id) {
+  const el = $(id), u = UI[id];
+  if (!el) return;
+  el.style.translate = u ? `${u.dx || 0}px ${u.dy || 0}px` : '';
+  el.style.scale = u && u.s ? String(u.s) : '';
+}
+MOVABLE.forEach(applyUI);
+function resetUI(id) { delete UI[id]; applyUI(id); saveUI(); }
+function resetAllUI() { UI = {}; MOVABLE.forEach(applyUI); saveUI(); setPin(null); }
+let locked = false;
+try { locked = localStorage.getItem('jarvis.lock') === '1'; } catch (e) { /* fine */ }
+window.jarvis.onLock && window.jarvis.onLock(() => {
+  locked = !locked;
+  try { localStorage.setItem('jarvis.lock', locked ? '1' : '0'); } catch (e) { /* fine */ }
+  addLog(locked ? 'Panels locked (click-through)' : 'Panels unlocked: right-drag to move');
+});
+const heroNow = { x: 0, y: 0, R: 100, on: false };
+const overHero = (x, y) => heroNow.on && Math.hypot(x - heroNow.x, y - heroNow.y) < heroNow.R * 0.85;
+let rmb = false, pdrag = null;
+function hitTarget(e) {
+  if (overOrb(e.clientX, e.clientY)) return 'orb';
+  const p = e.target.closest && e.target.closest('.panel, #rail');
+  if (p && p.id && !p.classList.contains('covered')) return p.id;
+  return overHero(e.clientX, e.clientY) ? 'hero' : null;
+}
+const applyAny = (id) => (id === 'hero' || id === 'orb' ? saveUI() : applyUI(id));
+
 // ---------- mouse: hold-to-talk, drag to move ----------
 // The overlay ignores the mouse (clicks pass to your desktop) except while the pointer is over the
 // visualizer or the launcher. mousemove events are still forwarded to us so we can tell.
@@ -424,33 +479,66 @@ function setInteractive(v) { if (v !== interactive) { interactive = v; window.ja
 const overOrb = (x, y) => Math.hypot(x - orbNow.x, y - orbNow.y) < orbNow.R * 1.75 + 6;
 
 document.addEventListener('mousemove', (e) => {
+  if (pdrag) {
+    const u = (UI[pdrag.id] = UI[pdrag.id] || {});
+    u.dx = Math.max(-W, Math.min(W, pdrag.u0.dx + e.clientX - pdrag.x0));
+    u.dy = Math.max(-H, Math.min(H, pdrag.u0.dy + e.clientY - pdrag.y0));
+    applyAny(pdrag.id);
+    return;
+  }
   if (dragging) {
     setPin({ x: (e.clientX - dragging.dx) / W, y: (e.clientY - dragging.dy) / H });
     return;
   }
   const on = overOrb(e.clientX, e.clientY);
-  setInteractive(on || pttActive || !!(e.target.closest && e.target.closest('.interactive')));
+  const tgt = on || locked ? null : hitTarget(e);
+  setInteractive(on || pttActive || !!tgt || !!(e.target.closest && e.target.closest('.interactive')));
   document.body.style.cursor = on ? 'pointer' : '';
   $('corner').classList.toggle('hover', on);
 });
-document.addEventListener('mouseleave', () => { if (!dragging && !pttActive) setInteractive(false); });
+document.addEventListener('mouseleave', () => { if (!dragging && !pdrag && !pttActive) setInteractive(false); });
 document.addEventListener('mousedown', (e) => {
-  if (!overOrb(e.clientX, e.clientY)) return;
+  if (e.button === 2) rmb = true;
+  const orb = overOrb(e.clientX, e.clientY);
+  const tgt = orb ? 'orb' : (locked ? null : hitTarget(e));
+  if (!tgt) return;
+  if (tgt !== 'orb' && e.button === 0) return;
   e.preventDefault();
   if (e.button === 0) {                       // hold to talk (also cuts Jarvis off mid-sentence)
     pttActive = true; refreshLabel(); send({ type: 'ptt_down' });
-  } else if (e.button === 2) {                // right-drag to move
-    dragging = { dx: e.clientX - orbNow.x, dy: e.clientY - orbNow.y };
+  } else if (e.button === 2) {                // right-drag to move (scroll while held to resize)
+    if (tgt === 'orb') dragging = { dx: e.clientX - orbNow.x, dy: e.clientY - orbNow.y, orb: true };
+    else {
+      const u = UI[tgt] || {};
+      pdrag = { id: tgt, x0: e.clientX, y0: e.clientY, u0: { dx: u.dx || 0, dy: u.dy || 0 } };
+      const el = $(tgt); el && el.classList.add('grab');
+    }
     document.body.style.cursor = 'grabbing';
     setInteractive(true);
-  } else if (e.button === 1) {                // middle-click: back to the default spot
-    setPin(null);
+  } else if (e.button === 1) {                // middle-click: back to the default spot and size
+    if (tgt === 'orb') { setPin(null); delete UI.orb; saveUI(); }
+    else if (tgt === 'hero') { delete UI.hero; saveUI(); }
+    else resetUI(tgt);
   }
 });
 document.addEventListener('mouseup', (e) => {
   if (e.button === 0 && pttActive) { pttActive = false; refreshLabel(); send({ type: 'ptt_up' }); }
-  if (e.button === 2 && dragging) { dragging = null; document.body.style.cursor = ''; }
+  if (e.button === 2) {
+    rmb = false;
+    if (dragging) dragging = null;
+    if (pdrag) { const el = $(pdrag.id); el && el.classList.remove('grab'); pdrag = null; saveUI(); }
+    document.body.style.cursor = '';
+  }
 });
+document.addEventListener('wheel', (e) => {
+  if (!rmb) return;
+  const id = pdrag ? pdrag.id : dragging ? 'orb' : hitTarget(e);
+  if (!id) return;
+  e.preventDefault();
+  const u = (UI[id] = UI[id] || {});
+  u.s = Math.max(0.4, Math.min(2.6, (u.s || 1) * Math.exp(-e.deltaY * 0.0016)));
+  applyAny(id);
+}, { passive: false });
 addEventListener('contextmenu', (e) => e.preventDefault());
 addEventListener('blur', () => { if (pttActive) { pttActive = false; refreshLabel(); send({ type: 'ptt_up' }); } });
 

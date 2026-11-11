@@ -62,7 +62,8 @@ app.whenReady().then(() => {
   tray.setToolTip('Jarvis');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Talk to Jarvis', click: () => win.webContents.send('hotkey') },
-    { label: 'Reset visualizer position', click: () => win.webContents.send('reset-orb') },
+    { label: 'Reset layout (positions and sizes)', click: () => win.webContents.send('reset-orb') },
+    { label: 'Lock / unlock panels (click-through)', click: () => win.webContents.send('lock-panels') },
     { label: 'Show / hide HUD', click: () => win.webContents.send('toggle-hud') },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },

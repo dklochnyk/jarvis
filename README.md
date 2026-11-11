@@ -127,6 +127,8 @@ Wake word and speech-to-text run on your machine. Only the text of what you say 
 ## Command-center HUD
 
 - **Move the visualizer:** hold the RIGHT mouse button on it and drag it anywhere (over other windows too). It remembers where you left it. Middle-click it, or use the tray menu, to put it back.
+- **Move and resize anything:** every panel, the brain and the core can be moved with RIGHT-drag, and resized by holding the RIGHT button and scrolling the wheel. Middle-click a panel to put it back; tray menu > Reset layout resets everything. Positions are remembered. If panels get in the way of clicking your desktop, tray menu > Lock / unlock panels makes them click-through again.
+- **Terminal panel:** a live mirror of the console window (errors in red, warnings in yellow, with an error count) so you can see problems without the black window.
 - **Talk to it:** press and HOLD the LEFT mouse button on the visualizer, speak, and let go. Pressing it while Jarvis is talking cuts him off first. A quick tap only interrupts.
 - **Quick-launch tiles:** the dock on the left. Click a tile to open that app, folder or website. Make your own list in `settings.yaml`:
 

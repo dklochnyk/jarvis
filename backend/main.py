@@ -20,6 +20,40 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOST, PORT = "127.0.0.1", 8765
 
 
+class Tee:
+    """Wraps stdout/stderr so everything printed to the console also reaches the HUD terminal panel."""
+
+    def __init__(self, real, hub, err):
+        self.real, self.hub, self.err, self.buf = real, hub, err, ""
+
+    def write(self, text):
+        try:
+            self.real.write(text)
+        except Exception:
+            pass
+        try:
+            self.buf += text.replace("\r\n", "\n").replace("\r", "\n")
+            while "\n" in self.buf:
+                line, self.buf = self.buf.split("\n", 1)
+                if line.strip():
+                    self.hub.term(line, self.err)
+            if len(self.buf) > 4000:
+                self.hub.term(self.buf, self.err)
+                self.buf = ""
+        except Exception:
+            pass
+        return len(text)
+
+    def flush(self):
+        try:
+            self.real.flush()
+        except Exception:
+            pass
+
+    def __getattr__(self, name):
+        return getattr(self.real, name)
+
+
 class Hub:
     """Thread-safe fan-out of events to every connected HUD."""
 
@@ -27,6 +61,7 @@ class Hub:
         self.clients = set()
         self.loop = None
         self.state = {"type": "state", "state": "loading"}
+        self.term_lines = []  # last console lines, replayed to HUDs that connect later
         self.sticky = {}  # latest event of these types is replayed to HUDs that connect later
 
     def emit(self, **ev):
@@ -40,6 +75,13 @@ class Hub:
             return
         msg = json.dumps(ev, default=str)
         self.loop.call_soon_threadsafe(self._broadcast, msg)
+
+    def term(self, text, err=False):
+        ev = {"type": "term", "text": text[:600], "err": bool(err)}
+        self.term_lines.append(ev)
+        del self.term_lines[:-150]
+        if self.loop is not None:
+            self.loop.call_soon_threadsafe(self._broadcast, json.dumps(ev))
 
     def _broadcast(self, msg):
         for ws in list(self.clients):
@@ -104,6 +146,7 @@ async def amain(hub, assistant):
             await ws.send(json.dumps(hub.state))
             for ev in list(hub.sticky.values()):
                 await ws.send(json.dumps(ev))
+            await ws.send(json.dumps({"type": "termbuf", "lines": list(hub.term_lines)}))
             async for raw in ws:
                 try:
                     cmd = json.loads(raw)
@@ -150,6 +193,7 @@ def main():
         print(f"Using {keyname} from .env: {key[:6]}...{key[-4:]} ({len(key)} characters)", flush=True)
 
     hub = Hub()
+    sys.stdout, sys.stderr = Tee(sys.stdout, hub, False), Tee(sys.stderr, hub, True)
     assistant = None
     from desktop import DesktopWatcher
 

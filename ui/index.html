@@ -109,7 +109,20 @@
   body.compact #rail { opacity: 0; }
 
   /* status group, left of the core in the bottom-right corner */
-  #bar { bottom: 52px; right: 320px; width: 280px; text-align: right; pointer-events: none; }
+
+  /* terminal: mirrors the console window so errors are visible */
+  #term { top: 50px; left: 50%; margin-left: -330px; width: 660px; text-transform: none; letter-spacing: .02em; }
+  #term .ph { text-transform: uppercase; }
+  #term .ph .cnt { margin-left: auto; letter-spacing: .12em; opacity: .8; }
+  #term .ph .cnt.bad { color: #ff6a6a; opacity: 1; text-shadow: 0 0 8px #ff4d4d; }
+  #tlines { max-height: 150px; overflow: hidden; font-size: 11px; line-height: 1.45; }
+  #tlines div { white-space: pre-wrap; word-break: break-all; opacity: .82; }
+  #tlines div.warn { color: #ffd166; opacity: 1; }
+  #tlines div.err { color: #ff6a6a; opacity: 1; text-shadow: 0 0 6px rgba(255, 80, 80, .6), 0 0 10px rgba(0, 6, 14, .9); }
+  body.moving .panel, body.moving #rail { outline: 1px dashed rgba(var(--c), .5); }
+  .panel.grab { outline: 1px dashed rgba(var(--c), .6); }
+  #rail { pointer-events: auto; }
+  #bar { bottom: 52px; right: 320px; width: 280px; text-align: right; }
   #bartitle { font-size: 14px; letter-spacing: .3em; color: #dff9ff; text-shadow: 0 0 12px rgb(var(--c)), 0 0 6px #000; }
   #barstate { font-size: 11px; letter-spacing: .3em; margin: 3px 0 6px; }
   #wave { display: block; width: 100%; height: 34px; }
@@ -211,6 +224,8 @@
     <div class="seg">NEURAL<span class="bars" id="r-syn"></span></div>
   </div>
 
+  <div id="term" class="panel"><div class="ph">Terminal <span class="cnt" id="tcnt"></span></div><div id="tlines"></div></div>
+
   <div id="bar" class="panel">
     <div id="bartitle">J.A.R.V.I.S. AI CORE</div><div id="barstate">STANDING BY</div>
     <canvas id="wave"></canvas>
@@ -241,7 +256,7 @@
     <canvas id="pl-spec"></canvas>
   </div>
 
-  <div id="corner"><span id="cstate"></span><span id="hint">HOLD: TALK · RIGHT-DRAG: MOVE</span></div>
+  <div id="corner"><span id="cstate"></span><span id="hint">HOLD: TALK · RIGHT-DRAG: MOVE · RIGHT-HOLD+SCROLL: SIZE</span></div>
   <div id="caption"><div id="cap-user"></div><div id="cap-ai"></div></div>
 </div>
 <script src="layout.js"></script>
