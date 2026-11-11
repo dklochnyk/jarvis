@@ -237,7 +237,7 @@ window.jarvis.onScreens && window.jarvis.onScreens((_e, m) => {
   S.phys = m.phys || null;
   homeRect = m.home || null;
   if (m.changed) { UI = {}; saveUI(); setPin(null); }
-  resize(); MOVABLE.forEach(applyUI); recomputeWins(); updateCovered();
+  resize(); MOVABLE.forEach(applyUI); MOVABLE.forEach(keepOnScreen); keepOnScreen('hero'); recomputeWins(); updateCovered();
 });
 
 const NBARS = 72;
@@ -487,6 +487,25 @@ function applyUI(id) {
   el.style.scale = u && u.s ? String(u.s) : '';
 }
 MOVABLE.forEach(applyUI);
+// Keep every item at least partly on the overlay, so one dragged off the edge can always be grabbed again.
+function keepOnScreen(id) {
+  const u = UI[id];
+  if (!u) return;
+  if (id === 'hero') {
+    u.dx = Math.max(-(W / 2 + HX) + 80, Math.min(CW - HX - W / 2 - 80, u.dx || 0));
+    u.dy = Math.max(-(H * 0.42 + HY) + 80, Math.min(CH - HY - H * 0.42 - 80, u.dy || 0));
+    return;
+  }
+  const el = $(id);
+  if (!el || id === 'orb') return;
+  const r = el.getBoundingClientRect(), m = 70;
+  if (r.width === 0) return;
+  if (r.left > CW - m) u.dx -= r.left - (CW - m);
+  if (r.right < m) u.dx += m - r.right;
+  if (r.top > CH - m) u.dy -= r.top - (CH - m);
+  if (r.bottom < m) u.dy += m - r.bottom;
+  applyUI(id);
+}
 function resetUI(id) { delete UI[id]; applyUI(id); saveUI(); }
 function resetAllUI() { UI = {}; MOVABLE.forEach(applyUI); saveUI(); setPin(null); }
 let locked = false;
@@ -520,6 +539,7 @@ document.addEventListener('mousemove', (e) => {
     u.dx = Math.max(-CW, Math.min(CW, pdrag.u0.dx + e.clientX - pdrag.x0));
     u.dy = Math.max(-CH, Math.min(CH, pdrag.u0.dy + e.clientY - pdrag.y0));
     applyAny(pdrag.id);
+    keepOnScreen(pdrag.id);
     return;
   }
   if (dragging) {
