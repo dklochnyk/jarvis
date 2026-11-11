@@ -178,7 +178,7 @@ function updateCovered() {
   for (const id of PANELS) {
     const el = $(id), r = el.getBoundingClientRect();
     if (!r.width || !r.height) continue;
-    el.classList.toggle('covered', Layout.covered({ l: r.left, t: r.top, r: r.right, b: r.bottom }, S.wins, innerWidth, innerHeight));
+    el.classList.toggle('covered', !(id === 'term' && document.activeElement === $('tin')) && Layout.covered({ l: r.left, t: r.top, r: r.right, b: r.bottom }, S.wins, innerWidth, innerHeight));
   }
 }
 setInterval(updateCovered, 400);   // panels resize as logs/timers come and go
@@ -489,6 +489,18 @@ function termLine(text, err) {
   cnt.classList.toggle('bad', n > 0);
 }
 $('tcnt').textContent = 'ALL CLEAR';
+
+// ---------- command box: type to Jarvis when the microphone isn't an option ----------
+const tin = $('tin');
+function openInput() { window.jarvis.focusInput(); setTimeout(() => { tin.focus(); updateCovered(); }, 90); }
+tin.addEventListener('mousedown', (e) => { if (document.activeElement !== tin) { e.preventDefault(); openInput(); } });
+tin.addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (e.key === 'Enter' && tin.value.trim()) { send({ type: 'text', text: tin.value.trim() }); tin.value = ''; tin.blur(); }
+  else if (e.key === 'Escape') tin.blur();
+});
+tin.addEventListener('blur', () => { window.jarvis.blurInput(); setInteractive(false); });
+window.jarvis.onFocusInput && window.jarvis.onFocusInput(() => { $('hud').classList.remove('hidden'); setTimeout(() => { tin.focus(); updateCovered(); }, 90); });
 
 // ---------- movable / scalable panels (right-drag to move, right-hold + scroll to resize) ----------
 const MOVABLE = ['diag', 'log', 'timers', 'dock', 'clockbox', 'perf', 'radar', 'bar', 'player', 'term', 'rail'];

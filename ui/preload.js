@@ -7,5 +7,8 @@ contextBridge.exposeInMainWorld('jarvis', {
   onLock: (cb) => ipcRenderer.on('lock-panels', cb),
   onScreens: (cb) => ipcRenderer.on('screens', cb),
   onQuality: (cb) => ipcRenderer.on('quality', cb),
+  focusInput: () => ipcRenderer.send('focus-input'),
+  blurInput: () => ipcRenderer.send('blur-input'),
+  onFocusInput: (cb) => ipcRenderer.on('focus-input', cb),
   setInteractive: (on) => ipcRenderer.send('interactive', !!on),
 });

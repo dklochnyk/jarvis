@@ -120,6 +120,11 @@
   #tlines div { white-space: pre-wrap; word-break: break-all; opacity: .82; }
   #tlines div.warn { color: #ffd166; opacity: 1; }
   #tlines div.err { color: #ff6a6a; opacity: 1; text-shadow: 0 0 6px rgba(255, 80, 80, .6), 0 0 10px rgba(0, 6, 14, .9); }
+  #tprompt { display: flex; gap: 8px; align-items: center; margin-top: 6px; padding-top: 5px; border-top: 1px solid rgba(var(--c), .25); font-size: 12px; }
+  #tprompt span { color: rgb(var(--c)); text-shadow: 0 0 8px rgb(var(--c)); }
+  #tin { flex: 1; background: rgba(0, 8, 18, .55); border: 1px solid rgba(var(--c), .3); border-radius: 3px; outline: none; color: #dff6ff; font: inherit; padding: 4px 7px; text-transform: none; letter-spacing: .02em; }
+  #tin:focus { border-color: rgba(var(--c), .9); box-shadow: 0 0 10px rgba(var(--c), .35); }
+  #tin::placeholder { color: rgba(var(--c), .55); }
   body.moving .panel, body.moving #rail { outline: 1px dashed rgba(var(--c), .5); }
   .panel.grab { outline: 1px dashed rgba(var(--c), .6); }
   #rail { pointer-events: auto; }
@@ -226,7 +231,8 @@
     <div class="seg">NEURAL<span class="bars" id="r-syn"></span></div>
   </div>
 
-  <div id="term" class="panel"><div class="ph">Terminal <span class="cnt" id="tcnt"></span></div><div id="tlines"></div></div>
+  <div id="term" class="panel"><div class="ph">Terminal <span class="cnt" id="tcnt"></span></div><div id="tlines"></div>
+    <div id="tprompt" class="interactive"><span>&gt;</span><input id="tin" type="text" placeholder="Type to Jarvis, press Enter (Ctrl+Alt+T)" autocomplete="off" spellcheck="false"></div></div>
 
   <div id="bar" class="panel">
     <div id="bartitle">J.A.R.V.I.S. AI CORE</div><div id="barstate">STANDING BY</div>

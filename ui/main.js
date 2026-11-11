@@ -121,6 +121,9 @@ function buildTray() {
 }
 
 // The overlay ignores the mouse except while the renderer says the pointer is over the visualizer / launcher.
+// The overlay can't take keyboard focus (so it never steals it from your apps) - except while you type in the command box.
+ipcMain.on('focus-input', () => { if (win) { win.setFocusable(true); win.focus(); } });
+ipcMain.on('blur-input', () => { if (win) { win.blur(); win.setFocusable(false); } });
 ipcMain.on('interactive', (_e, on) => { if (win) win.setIgnoreMouseEvents(!on, { forward: true }); });
 
 app.whenReady().then(() => {
@@ -129,6 +132,10 @@ app.whenReady().then(() => {
 
   globalShortcut.register(HOTKEY, () => win && win.webContents.send('hotkey'));
   globalShortcut.register(HUD_TOGGLE, () => win && win.webContents.send('toggle-hud'));
+  globalShortcut.register('CommandOrControl+Alt+T', () => {   // type a command instead of speaking it
+    if (!win) return;
+    win.setFocusable(true); win.focus(); win.setIgnoreMouseEvents(false); win.webContents.send('focus-input');
+  });
   globalShortcut.register('CommandOrControl+Alt+Q', () => {   // cycle visual quality: low > medium > high
     screenCfg.quality = ((screenCfg.quality | 0) + 1) % 3; saveScreenCfg(); win && win.webContents.send('quality', screenCfg.quality); buildTray();
   });

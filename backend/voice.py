@@ -35,6 +35,13 @@ class Mic:
         self.q = queue.Queue(maxsize=300)
         self.muted = False
         self.stream = None
+        self.last_cb = time.time()
+
+    def name(self):
+        try:
+            return sd.query_devices(self.device, "input")["name"]
+        except Exception as e:
+            return f"unknown ({e})"
 
     def start(self):
         self.stream = sd.InputStream(
@@ -44,6 +51,7 @@ class Mic:
         self.stream.start()
 
     def _cb(self, indata, frames, t, status):
+        self.last_cb = time.time()
         if self.muted:
             return
         try:
