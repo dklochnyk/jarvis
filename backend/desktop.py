@@ -1,4 +1,4 @@
-"""Watches which windows are open on the primary screen so the HUD can get out of the way.
+"""Watches which windows are open on any screen so the HUD can get out of the way.
 
 Sends rectangles as fractions of the screen (0..1), so screen scaling / DPI never matters."""
 import sys
@@ -85,9 +85,11 @@ class DesktopWatcher(threading.Thread):
         self.emit, self.interval = emit, interval
         self.ignore = {str(x).lower().removesuffix(".exe") for x in ((cfg or {}).get("ignore_apps") or [])}
         self.last = None
+        self.abs = []
 
     def snapshot(self):
         rects, sw, sh = _pixel_rects(self.ignore)
+        self.abs = sorted([l, t, r, b] for l, t, r, b in rects if r - l >= MIN_W and b - t >= MIN_H)
         return to_fractions(rects, sw, sh)
 
     def run(self):
@@ -97,9 +99,11 @@ class DesktopWatcher(threading.Thread):
         while True:
             try:
                 wins = self.snapshot()
-                if wins != self.last:
-                    self.last = wins
-                    self.emit(type="desktop", windows=wins)
+                key = (wins, self.abs)
+                if key != self.last:
+                    self.last = key
+                    # windows: fractions of the primary screen. rects: absolute pixels across every screen.
+                    self.emit(type="desktop", windows=wins, rects=self.abs)
             except Exception as e:  # never let a hiccup kill the watcher
                 print(f"[desktop] {e}", flush=True)
             time.sleep(self.interval)

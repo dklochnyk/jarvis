@@ -12,6 +12,7 @@
   #hud { position: fixed; inset: 0; transition: opacity .6s; }
   #hud.hidden { opacity: 0; }
   canvas#c { position: fixed; inset: 0; pointer-events: none; }
+  #stage { position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; transform: translateZ(0); }   /* the home screen: fixed children are placed against it */
 
   /* ---- panels: free-form text floating on the desktop (no boxes). Plates return when a window is open. ---- */
   .panel { position: fixed; color: rgb(var(--c)); font-family: Consolas, monospace; font-size: 11px;
@@ -189,6 +190,7 @@
 <body>
 <div id="hud">
   <canvas id="c"></canvas>
+  <div id="stage">
   <div class="frame tl"></div><div class="frame tr"></div><div class="frame bl"></div><div class="frame br"></div>
 
   <div id="diag" class="panel">
@@ -258,6 +260,7 @@
 
   <div id="corner"><span id="cstate"></span><span id="hint">HOLD: TALK · RIGHT-DRAG: MOVE · RIGHT-HOLD+SCROLL: SIZE</span></div>
   <div id="caption"><div id="cap-user"></div><div id="cap-ai"></div></div>
+  </div>
 </div>
 <script src="layout.js"></script>
 <script src="brain.js"></script>

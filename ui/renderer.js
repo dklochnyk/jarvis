@@ -33,8 +33,8 @@ function setPin(p) {
   try { p ? localStorage.setItem('jarvis.orbpin', JSON.stringify(p)) : localStorage.removeItem('jarvis.orbpin'); } catch (e) { /* storage unavailable: fine */ }
 }
 
-const S = { sp: null, spec: new Array(40).fill(0), specAt: 0, specShown: new Array(40).fill(0), procs: [], exec: false, planned: false, info: null, wins: [], compact: 0, state: 'loading', followup: false, level: 0, target: 0, prom: 0, hold: 0,
-            color: [...COLORS.loading], t: 0, pin: loadPin(), timers: [] };
+const S = { sp: null, spec: new Array(40).fill(0), specAt: 0, specShown: new Array(40).fill(0), procs: [], exec: false, planned: false, info: null, compact: 0, state: 'loading', followup: false, level: 0, target: 0, prom: 0, hold: 0,
+            color: [...COLORS.loading], t: 0, pin: loadPin(), timers: [], wins: [], homeWins: [], legacyWins: [], rects: null, phys: null };
 let pttActive = false;
 const eff = () => (pttActive && (S.state === 'idle' || S.state === 'speaking') ? 'listening' : S.state);
 
@@ -118,7 +118,7 @@ function handle(m) {
     case 'error': addLog('ERROR: ' + m.text); break;
     case 'term': termLine(m.text, m.err); break;
     case 'termbuf': $('tlines').replaceChildren(); (m.lines || []).forEach((l) => termLine(l.text, l.err)); break;
-    case 'desktop': S.wins = m.windows || []; updateCovered(); break;
+    case 'desktop': S.legacyWins = m.windows || []; S.rects = m.rects || null; recomputeWins(); updateCovered(); break;
     case 'launcher': buildTiles(m.items || []); break;
     case 'spotify': S.sp = { ...m, at: Date.now() }; updatePlayer(true); break;
     case 'spectrum': S.spec = m.bands || S.spec; S.specAt = Date.now(); break;
@@ -157,9 +157,24 @@ function onStats(m) {
 }
 
 // ---------- window awareness ----------
+const isCompactNow = () => S.homeWins.length > 0;
+// Windows arrive as absolute screen pixels. Turn them into fractions of the overlay window (for hiding panels under them)
+// and keep the ones that touch the home screen (they put the HUD in its small "window open" layout).
+function recomputeWins() {
+  const ph = S.phys;
+  if (!S.rects || !ph) { S.wins = S.legacyWins || []; S.homeWins = S.wins; return; }
+  const w = ph.win, hm = ph.home, wins = [], home = [];
+  for (const [l, t, r, b] of S.rects) {
+    const L = Math.max(l, w.x), T = Math.max(t, w.y), R = Math.min(r, w.x + w.w), B = Math.min(b, w.y + w.h);
+    if (R - L < 40 || B - T < 40) continue;
+    wins.push([(L - w.x) / w.w, (T - w.y) / w.h, (R - w.x) / w.w, (B - w.y) / w.h]);
+    if (Math.min(r, hm.x + hm.w) - Math.max(l, hm.x) >= 120 && Math.min(b, hm.y + hm.h) - Math.max(t, hm.y) >= 80) home.push(wins[wins.length - 1]);
+  }
+  S.wins = wins; S.homeWins = home;
+}
 const PANELS = ['diag', 'log', 'timers', 'dock', 'clockbox', 'perf', 'radar', 'term'];
 function updateCovered() {
-  document.body.classList.toggle('compact', Layout.isCompact(S.wins));
+  document.body.classList.toggle('compact', isCompactNow());
   for (const id of PANELS) {
     const el = $(id), r = el.getBoundingClientRect();
     if (!r.width || !r.height) continue;
@@ -201,14 +216,29 @@ setInterval(() => { waveArr.push(Math.min(1, S.level * (0.45 + Math.random() * 0
 
 // ---------- canvas: orb + digital brain + audio visuals ----------
 const cv = $('c'), ctx = cv.getContext('2d');
-let W, H;
+// The overlay window can span several monitors. CW/CH = whole window; the "home" screen (HX,HY,W,H) hosts the main stage.
+let W, H, CW, CH, HX = 0, HY = 0, homeRect = null;
+function applyHome() {
+  const h = homeRect || { x: 0, y: 0, w: CW, h: CH };
+  HX = h.x; HY = h.y; W = h.w; H = h.h;
+  const st = $('stage').style;
+  st.left = HX + 'px'; st.top = HY + 'px'; st.width = W + 'px'; st.height = H + 'px';
+  Scenery.init(W, H);
+}
 function resize() {
   const dpr = window.devicePixelRatio || 1;
-  W = innerWidth; H = innerHeight;
-  cv.width = W * dpr; cv.height = H * dpr;
+  CW = innerWidth; CH = innerHeight;
+  cv.width = CW * dpr; cv.height = CH * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  applyHome();
 }
-addEventListener('resize', () => { resize(); Scenery.init(W, H); }); resize(); Scenery.init(W, H);
+addEventListener('resize', resize); resize();
+window.jarvis.onScreens && window.jarvis.onScreens((_e, m) => {
+  S.phys = m.phys || null;
+  homeRect = m.home || null;
+  if (m.changed) { UI = {}; saveUI(); setPin(null); }
+  resize(); MOVABLE.forEach(applyUI); recomputeWins(); updateCovered();
+});
 
 const NBARS = 72;
 const bars = new Array(NBARS).fill(0);
@@ -274,19 +304,20 @@ document.addEventListener('click', (e) => {
 });
 
 function placeFollowers(cx, cy, R) {
-  const f = Layout.followers(cx, cy, R, W, H);
+  const f = Layout.followers(cx + HX, cy + HY, R, CW, CH);   // worked out in window space, placed in stage space
   const cap = $('caption').style, lab = $('corner').style;
-  cap.left = f.caption.left + 'px';
-  cap.top = f.caption.top != null ? f.caption.top + 'px' : 'auto';
-  cap.bottom = f.caption.bottom != null ? f.caption.bottom + 'px' : 'auto';
-  lab.left = f.label.x + 'px'; lab.top = f.label.y + 'px';
+  cap.left = (f.caption.left - HX) + 'px';
+  cap.top = f.caption.top != null ? (f.caption.top - HY) + 'px' : 'auto';
+  cap.bottom = f.caption.bottom != null ? (f.caption.bottom - (CH - HY - H)) + 'px' : 'auto';
+  lab.left = (f.label.x - HX) + 'px'; lab.top = (f.label.y - HY) + 'px';
   lab.transform = f.label.onLeft ? 'translate(-100%,-50%)' : 'translate(0,-50%)';
   lab.textAlign = f.label.onLeft ? 'right' : 'left';
 }
 
 function frame(ms) {
   const t = ms / 1000, dt = Math.min(0.05, t - S.t); S.t = t; frameNo++;
-  ctx.clearRect(0, 0, W, H);
+  ctx.clearRect(0, 0, CW, CH);
+  ctx.save(); ctx.translate(HX, HY);   // everything below is drawn relative to the home screen
 
   // ease colour + prominence + audio level
   const st = eff();
@@ -305,15 +336,19 @@ function frame(ms) {
   // No windows: orb sits bottom-right when idle and grows toward the screen centre when active.
   // Window open: it stays small in the bottom-right corner. A dragged position overrides both.
   const k = S.prom * S.prom * (3 - 2 * S.prom);
-  const wantC = Layout.isCompact(S.wins) ? 1 : 0;
+  const wantC = isCompactNow() ? 1 : 0;
   S.compact += (wantC - S.compact) * 0.07;
   const cm = S.compact * S.compact * (3 - 2 * S.compact);
-  const o0 = Layout.orb(W, H, cm, k, S.pin);
+  const o0 = Layout.orb(W, H, cm, k, null);
+  if (S.pin) {                                   // a dragged position is kept as a fraction of the whole window (any screen)
+    const mg = Math.min(o0.R * 2, CW / 2, CH / 2);
+    o0.x = Layout.clamp(S.pin.x * CW, mg, CW - mg) - HX; o0.y = Layout.clamp(S.pin.y * CH, mg, CH - mg) - HY;
+  }
   const cx = o0.x, cy = o0.y, R = o0.R * uiScale('orb');
-  orbNow.x = cx; orbNow.y = cy; orbNow.R = R;
+  orbNow.x = cx + HX; orbNow.y = cy + HY; orbNow.R = R;
   const speed = st === 'thinking' ? 3.2 : st === 'listening' ? 1.2 : 0.55;
 
-  const follow = Layout.isCompact(S.wins) || !!S.pin;
+  const follow = isCompactNow() || !!S.pin;
   if (follow !== lastFollow) {
     lastFollow = follow;
     document.body.classList.toggle('follow', follow);
@@ -332,7 +367,7 @@ function frame(ms) {
     drawEdgeDim(big);
     const hu = UI.hero || {};
     const hR = Math.min(W * 0.17, H * 0.27) * (hu.s || 1), hx = W / 2 + (hu.dx || 0), hy = H * 0.42 + (hu.dy || 0);
-    heroNow.x = hx; heroNow.y = hy; heroNow.R = hR; heroNow.on = big > 0.5;
+    heroNow.x = hx + HX; heroNow.y = hy + HY; heroNow.R = hR; heroNow.on = big > 0.5;
     const ha = Math.min(1, 0.75 + 0.25 * brainAct) * big;
     const rp = hR * 0.34;                                           // platform sits just under the stem
     Scenery.drawPlatform(ctx, hx, hy + hR * 1.02 + 44 - rp * 2.95, rp, t, c, ha, lv);
@@ -408,6 +443,7 @@ function frame(ms) {
     }
   }
 
+  ctx.restore();
   if (frameNo % 3 === 0) { Perf.draw($('perfc'), c); }
   if (frameNo % 2 === 0) {
     Scenery.drawRadar($('radarc'), S.procs, t, c);
@@ -481,13 +517,13 @@ const overOrb = (x, y) => Math.hypot(x - orbNow.x, y - orbNow.y) < orbNow.R * 1.
 document.addEventListener('mousemove', (e) => {
   if (pdrag) {
     const u = (UI[pdrag.id] = UI[pdrag.id] || {});
-    u.dx = Math.max(-W, Math.min(W, pdrag.u0.dx + e.clientX - pdrag.x0));
-    u.dy = Math.max(-H, Math.min(H, pdrag.u0.dy + e.clientY - pdrag.y0));
+    u.dx = Math.max(-CW, Math.min(CW, pdrag.u0.dx + e.clientX - pdrag.x0));
+    u.dy = Math.max(-CH, Math.min(CH, pdrag.u0.dy + e.clientY - pdrag.y0));
     applyAny(pdrag.id);
     return;
   }
   if (dragging) {
-    setPin({ x: (e.clientX - dragging.dx) / W, y: (e.clientY - dragging.dy) / H });
+    setPin({ x: (e.clientX - dragging.dx) / CW, y: (e.clientY - dragging.dy) / CH });
     return;
   }
   const on = overOrb(e.clientX, e.clientY);
