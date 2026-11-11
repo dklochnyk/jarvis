@@ -1,0 +1,77 @@
+# Jarvis DEFAULT settings. Updates replace this file - put your own changes in settings.yaml instead.
+assistant_name: Jarvis
+user_name:                 # what Jarvis calls you (set it in settings.yaml)
+provider: gemini           # gemini | claude  (which AI does the thinking)
+gemini_model: auto         # auto = newest Flash model your key can use. Or name one, e.g. gemini-2.5-pro
+model: claude-sonnet-5-5   # Claude model id, used when provider is claude
+max_history_messages: 30
+
+# --- Wake word / hotkey -------------------------------------------------
+# Wake phrase is "Hey Jarvis" (openWakeWord pretrained model).
+wake_word: hey_jarvis
+wake_threshold: 0.5        # lower = more sensitive, higher = fewer false triggers
+followup_seconds: 7        # after a reply, keep listening this long without the wake word
+# Global hotkey is set in ui/main.js (default Ctrl+Alt+J). Press it while Jarvis
+# is talking to interrupt him.
+
+# --- Listening ----------------------------------------------------------
+vad_threshold: 0.012       # minimum mic energy that counts as speech. Jarvis also adapts to room noise
+silence_seconds: 1.1       # silence that ends your sentence (raise if he cuts you off mid-thought)
+mic_device:                # leave empty for the Windows default. To pick one: run list-mics.bat, put its number here
+max_record_seconds: 20
+
+# --- Speech to text (local, faster-whisper) ------------------------------
+stt:
+  model: small.en         # tiny.en (fastest) | base.en | small.en (good) | medium.en (best, slow on CPU)
+  device: cpu              # cpu | cuda
+  compute_type: int8       # int8 for cpu, float16 for cuda
+  beam_size: 5             # higher = more accurate, a little slower
+  prompt: "Hey Jarvis. Open Spotify. Play some music. Google search. Set a timer. Close Chrome."  # hints common words
+
+# --- Text to speech -------------------------------------------------------
+# provider: piper (local, good) | sapi (Windows built-in, zero setup) | elevenlabs (cloud, best)
+tts:
+  provider: piper
+  piper:
+    model_path: voices/en_GB-alan-medium.onnx
+  sapi:
+    rate: 185
+  elevenlabs:
+    voice_id: JBFqnCBsd6RMkjVDRZzb     # swap for any voice in your ElevenLabs library
+    model_id: eleven_flash_v2_5
+
+# --- App launcher aliases -------------------------------------------------
+# name you say -> what Windows should launch. Anything not listed here is
+# looked up automatically in your Start Menu shortcuts.
+apps:
+  notepad: notepad.exe
+  calculator: calc.exe
+  paint: mspaint.exe
+  file explorer: explorer.exe
+  explorer: explorer.exe
+  task manager: taskmgr.exe
+  command prompt: cmd.exe
+  terminal: wt.exe
+  chrome: chrome.exe
+  edge: msedge.exe
+  firefox: firefox.exe
+  spotify: "spotify:"
+  settings: "ms-settings:"
+  vscode: code
+
+# --- Your own folders: say "open <name>" ---------------------------------------
+# Standard folders (downloads, documents, desktop, pictures, music, videos) work automatically.
+# Anything else you name here, e.g.  schedule: "C:\\Users\\you\\Documents\\Baseball\\Schedule"
+folders: {}
+
+# --- Spotify (Premium): see README for the 2-minute setup ----------------------
+spotify:
+  redirect_uri: "http://127.0.0.1:8888/callback"
+
+# --- Self-update from GitHub -----------------------------------------------------
+# Jarvis downloads newer versions of its own code from this repo when it starts.
+# Private repo? Put a read-only token in .env as GITHUB_TOKEN=...
+update:
+  repo: dklochnyk/jarvis
+  branch: main
+  auto: true               # check on every start (say "update yourself" any time to check now)

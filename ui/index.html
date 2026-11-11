@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; connect-src ws://127.0.0.1:8765; style-src 'self' 'unsafe-inline'">
+<title>Jarvis</title>
+<style>
+  :root { --c: 0, 200, 255; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: transparent;
+               font-family: "Segoe UI", "Consolas", sans-serif; user-select: none; }
+  #hud { position: fixed; inset: 0; transition: opacity .6s; }
+  #hud.hidden { opacity: 0; }
+  canvas { position: fixed; inset: 0; }
+
+  .panel { position: fixed; color: rgb(var(--c)); font-family: Consolas, monospace; font-size: 12px;
+           letter-spacing: .12em; text-transform: uppercase; transition: opacity .6s;
+           text-shadow: 0 0 8px rgba(var(--c), .6); }
+  .dim .panel { opacity: .45; }
+
+  #clockbox { top: 28px; right: 36px; text-align: right;
+              border-right: 2px solid rgba(var(--c), .7); padding: 6px 14px 6px 0; }
+  #time { font-size: 34px; font-weight: 300; letter-spacing: .08em; }
+  #date { opacity: .75; margin-top: 2px; }
+  #stats { top: 120px; right: 36px; width: 190px; }
+  .stat { margin-bottom: 10px; }
+  .stat .row { display: flex; justify-content: space-between; margin-bottom: 3px; }
+  .bar { height: 3px; background: rgba(var(--c), .18); }
+  .bar > i { display: block; height: 100%; width: 0; background: rgb(var(--c));
+             box-shadow: 0 0 8px rgb(var(--c)); transition: width .8s; }
+  #status { top: 36px; left: 36px; border-left: 2px solid rgba(var(--c), .7); padding-left: 12px; }
+  #status b { display: block; font-size: 18px; font-weight: 400; letter-spacing: .2em; }
+  #log { top: 100px; left: 36px; width: 360px; line-height: 1.7; opacity: .8; }
+  #log div { animation: slide .4s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  @keyframes slide { from { opacity: 0; transform: translateX(-12px); } }
+
+  #timers { top: 300px; left: 36px; width: 260px; }
+  #timers div { display: flex; justify-content: space-between; margin-bottom: 6px;
+                border-left: 2px solid rgba(var(--c), .5); padding-left: 10px; }
+
+  #caption { position: fixed; left: 50%; bottom: 70px; transform: translateX(-50%); width: 900px; max-width: 70vw;
+             text-align: center; transition: opacity .8s; opacity: 0; }
+  #caption.show { opacity: 1; }
+  #cap-user { color: rgba(var(--c), .65); font-size: 16px; margin-bottom: 8px; font-style: italic; }
+  #cap-ai { color: #eaffff; font-size: 24px; font-weight: 300; line-height: 1.35;
+            text-shadow: 0 0 14px rgba(var(--c), .9); }
+</style>
+</head>
+<body>
+<div id="hud">
+  <canvas id="c"></canvas>
+
+  <div id="status" class="panel"><span id="name">JARVIS</span><b id="state">INITIALISING</b></div>
+  <div id="log" class="panel"></div>
+  <div id="timers" class="panel"></div>
+
+  <div id="clockbox" class="panel"><div id="time">--:--</div><div id="date"></div></div>
+  <div id="stats" class="panel">
+    <div class="stat"><div class="row"><span>CPU</span><span id="cpuv">--</span></div><div class="bar"><i id="cpub"></i></div></div>
+    <div class="stat"><div class="row"><span>MEM</span><span id="memv">--</span></div><div class="bar"><i id="memb"></i></div></div>
+  </div>
+
+  <div id="caption"><div id="cap-user"></div><div id="cap-ai"></div></div>
+</div>
+<script src="renderer.js"></script>
+</body>
+</html>

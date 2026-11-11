@@ -1,0 +1,14 @@
+# secrets and per-machine files - never in the repo
+.env
+.venv/
+node_modules/
+settings.yaml
+config.yaml
+.version
+.noupdate
+.backup/
+.spotify_cache
+voices/*.onnx
+voices/*.json
+__pycache__/
+*.zip
