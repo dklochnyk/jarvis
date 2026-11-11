@@ -75,7 +75,7 @@
   function text(dom) {
     if (!last) return;
     const rows = (last.procs || []).map(([n, v]) => `<div class="row"><span>${n.replace(/[<>&]/g, '').slice(0, 22)}</span><span>${v.toFixed(1)}%</span></div>`);
-    dom.procs.innerHTML = rows.length ? '<div class="ph" style="margin:6px 0 2px">Top processes</div>' + rows.join('') : '';
+    if (dom.procs) dom.procs.innerHTML = rows.length ? '<div class="ph" style="margin:6px 0 2px">Top processes</div>' + rows.join('') : '';
     dom.up.textContent = 'UP ' + fmtUptime(last.uptime || 0);
     dom.bat.textContent = last.battery == null ? 'AC POWER' : 'BAT ' + last.battery + '%' + (last.plugged ? ' ⚡' : '');
   }

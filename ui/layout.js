@@ -17,8 +17,10 @@
 
   // Where the orb lives. c = 0 (no windows) .. 1 (windows open); k = 0 idle .. 1 active.
   // pin = {x, y} as screen fractions when the user has dragged it somewhere (then it never drifts).
-  const orb = (W, H, c, k, pin) => {
-    const big = { x: W - 150 + (W / 2 - (W - 150)) * k, y: H - 170 + (H / 2 - 40 - (H - 170)) * k, R: 46 + 64 * k };
+  const orb = (W, H, c, k, pin, idle = 'center') => {
+    const big = idle === 'corner'
+      ? { x: W - 150 + (W / 2 - (W - 150)) * k, y: H - 170 + (H / 2 - 40 - (H - 170)) * k, R: 46 + 64 * k }
+      : { x: W / 2, y: H / 2 - 60, R: 76 + 36 * k };   // a clear desktop gets a big core in the middle
     const small = { x: W - 80, y: H - 120, R: 22 + 8 * k };
     const R = big.R + (small.R - big.R) * c;
     let x = big.x + (small.x - big.x) * c, y = big.y + (small.y - big.y) * c;

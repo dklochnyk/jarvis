@@ -60,15 +60,11 @@ class Brain:
                     final = stream.get_final_message()
                 if clean(buf):
                     on_sentence(clean(buf))
-                # Keep only the reply itself in history. Thinking blocks are signed against the exact
-                # conversation they were made in, so replaying them later (after history is trimmed or
-                # Jarvis restarts) makes the API reject the request with a 400.
-                kept = [b for b in final.content if b.type not in ("thinking", "redacted_thinking")]
-                self.history.append({"role": "assistant", "content": kept})
+                self.history.append({"role": "assistant", "content": final.content})
                 if final.stop_reason != "tool_use":
                     return
                 results = []
-                for block in kept:
+                for block in final.content:
                     if block.type == "tool_use":
                         self.emit(type="tool", name=block.name, input=block.input)
                         out = self.tools.run(block.name, block.input)

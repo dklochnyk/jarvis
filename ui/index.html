@@ -28,19 +28,25 @@
   .dim .panel { opacity: .5; }
   .panel.covered, .dim .panel.covered { opacity: 0 !important; pointer-events: none; }   /* a window is on top of it: tuck it away */
 
-  /* left column */
-  #status { top: 28px; left: 28px; width: 270px; }
-  #status b { display: block; font-size: 19px; font-weight: 400; letter-spacing: .22em; margin-top: 2px; }
-  #status #name { opacity: .7; font-size: 10px; letter-spacing: .35em; }
-  #core { top: 104px; left: 28px; width: 270px; }
-  #core .kv { display: flex; justify-content: space-between; line-height: 1.75; }
-  #core .kv span:first-child { opacity: .6; }
-  #eeg { display: block; width: 100%; height: 38px; margin-top: 6px; }
-  #log { top: 262px; left: 28px; width: 270px; line-height: 1.7; }
+  /* left column: system diagnostics */
+  #diag { top: 28px; left: 28px; width: 300px; padding: 12px 14px 10px; }
+  #diag h1 { margin: 0; font: 400 20px Consolas, monospace; letter-spacing: .3em; color: #dff9ff; text-shadow: 0 0 12px rgb(var(--c)); }
+  #diag h2 { margin: 2px 0 10px; font: 400 10px Consolas, monospace; letter-spacing: .3em; color: rgb(var(--c)); opacity: .85; }
+  .drow { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; padding: 5px 0; border-top: 1px solid rgba(var(--c), .1); }
+  .di { width: 30px; height: 30px; box-sizing: border-box; padding: 5px; border: 1px solid rgba(var(--c), .5); border-radius: 8px;
+        background: rgba(var(--c), .08); box-shadow: inset 0 0 10px rgba(var(--c), .15); }
+  .di svg { width: 100%; height: 100%; fill: none; stroke: rgb(var(--c)); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .dl b { display: block; font-weight: 400; font-size: 10.5px; letter-spacing: .12em; color: #dff9ff; }
+  .dl i { display: block; font-style: normal; font-size: 10px; letter-spacing: .1em; color: #2dffb0; text-transform: none; }
+  .dv { font-size: 13px; letter-spacing: .06em; color: #dff9ff; text-align: right; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #dfoot { margin-top: 6px; padding-top: 8px; border-top: 1px solid rgba(var(--c), .25); display: flex; justify-content: space-between; align-items: center; font-size: 11px; }
+  #dfoot .on { color: #2dffb0; text-shadow: 0 0 8px #2dffb0; }
+  #dfoot .on::before { content: "●"; margin-right: 6px; }
+  #log { top: 474px; left: 28px; width: 300px; line-height: 1.7; }
   #log div { animation: slide .4s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .85; }
   #log:empty { display: none; }
   @keyframes slide { from { opacity: 0; transform: translateX(-12px); } }
-  #timers { top: 420px; left: 28px; width: 270px; }
+  #timers { top: 612px; left: 28px; width: 300px; }
   #timers:empty { display: none; }
   #timers div { display: flex; justify-content: space-between; margin-bottom: 6px;
                 border-left: 2px solid rgba(var(--c), .5); padding-left: 10px; }
@@ -53,22 +59,70 @@
   #secbar i { display: block; height: 100%; width: 0; background: rgb(var(--c)); box-shadow: 0 0 8px rgb(var(--c)); }
   #perf { top: 140px; right: 28px; width: 320px; }
   #perfc { display: block; width: 292px; height: 278px; }
-  #procs { margin-top: 4px; }
-  #procs .row { display: flex; justify-content: space-between; line-height: 1.7; opacity: .9; }
+  #radar { top: 520px; right: 28px; width: 320px; }
+  #radarc { display: block; width: 292px; height: 176px; }
+  @media (max-height: 820px) { #radar { display: none; } }
   #sysline { margin-top: 6px; opacity: .6; display: flex; justify-content: space-between; }
 
-  /* quick launch dock (clickable) */
-  #dock { bottom: 70px; left: 28px; width: 270px; }
-  #tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
-  .tile { position: relative; padding: 8px 2px 6px; text-align: center; cursor: pointer;
-          border: 1px solid rgba(var(--c), .25); background: rgba(var(--c), .06);
-          clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
-          transition: background .15s, border-color .15s, transform .1s; }
-  .tile:hover { background: rgba(var(--c), .22); border-color: rgba(var(--c), .9); text-shadow: 0 0 12px rgb(var(--c)); }
-  .tile:active { transform: scale(.94); background: rgba(var(--c), .4); }
-  .tile .ic { font-size: 20px; line-height: 26px; height: 26px; font-family: "Segoe UI Emoji", "Segoe UI", sans-serif; text-transform: none; }
-  .tile .nm { font-size: 9px; letter-spacing: .08em; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 3px; }
+  /* quick launch dock: honeycomb of glowing hex keys */
+  @property --ang { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+  #dock { bottom: 70px; left: 28px; width: 300px; padding-bottom: 14px; }
+  #dock .ph .cnt { opacity: .6; letter-spacing: .1em; }
+  #tiles { display: grid; grid-template-columns: repeat(3, 74px); justify-content: center; column-gap: 4px; padding: 2px 0 4px; }
+  .tile { --hex: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0 50%);
+          position: relative; width: 74px; height: 65px; cursor: pointer; clip-path: var(--hex);
+          background: conic-gradient(from var(--ang), rgba(var(--c), .75), rgba(var(--c), .15) 40%, rgba(var(--c), .75));
+          transition: filter .15s, transform .12s; }
+  .tile { transform: translateX(-20px); }
+  .tile:nth-child(n+4) { margin-top: -10px; }
+  .tile:nth-child(6n+4), .tile:nth-child(6n+5), .tile:nth-child(6n+6) { transform: translateX(20px); }
+  .tile:hover { transform: translateX(-20px) scale(1.08); }
+  .tile:nth-child(6n+4):hover, .tile:nth-child(6n+5):hover, .tile:nth-child(6n+6):hover { transform: translateX(20px) scale(1.08); }
+  .tile .in { position: absolute; inset: 2px; clip-path: var(--hex); display: flex; flex-direction: column; align-items: center; justify-content: center;
+              background: radial-gradient(circle at 50% 35%, rgba(var(--c), .16), rgba(3, 10, 20, .96) 70%); overflow: hidden; }
+  .tile .in::after { content: ""; position: absolute; left: 0; right: 0; height: 14px; top: -14px; opacity: 0;
+                     background: linear-gradient(180deg, transparent, rgba(var(--c), .55), transparent); }
+  .tile .ic { font-size: 21px; line-height: 24px; height: 24px; text-transform: none; font-family: "Segoe UI Emoji", "Segoe UI", sans-serif;
+              filter: saturate(.55) brightness(1.15) drop-shadow(0 0 5px rgba(var(--c), .9)); }
+  .tile .nm { font-size: 8px; letter-spacing: .1em; margin-top: 3px; max-width: 58px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #dff9ff; }
+  .tile:hover { filter: drop-shadow(0 0 8px rgb(var(--c))) brightness(1.25); animation: spin 2.4s linear infinite; }
+  .tile:hover .in { background: radial-gradient(circle at 50% 40%, rgba(var(--c), .38), rgba(3, 14, 26, .95) 75%); }
+  .tile:hover .in::after { opacity: 1; animation: scan .9s linear infinite; }
+  .tile:active { transform: scale(.93); }
+  .tile.fire .in { animation: flash .5s ease-out; }
+  @keyframes spin { to { --ang: 360deg; } }
+  @keyframes scan { to { top: 100%; } }
+  @keyframes flash { 0% { background: rgb(var(--c)); } 100% { background: radial-gradient(circle at 50% 35%, rgba(var(--c), .16), rgba(3, 10, 20, .96) 70%); } }
   #dock .empty { opacity: .6; line-height: 1.6; text-transform: none; letter-spacing: .02em; }
+
+  /* top rail: segmented live meters */
+  #rail { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 26px; padding: 7px 22px; pointer-events: none;
+          color: rgb(var(--c)); font: 10px Consolas, monospace; letter-spacing: .15em; transition: opacity .6s;
+          background: linear-gradient(180deg, rgba(4, 16, 28, .55), rgba(4, 16, 28, .25));
+          clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 100%, 0 100%); border-bottom: 1px solid rgba(var(--c), .5); }
+  .seg { display: flex; align-items: center; gap: 8px; }
+  .seg .bars { display: flex; gap: 2px; }
+  .seg .bars i { width: 4px; height: 10px; background: rgba(var(--c), .15); }
+  .seg .bars i.on { background: rgb(var(--c)); box-shadow: 0 0 6px rgb(var(--c)); }
+  .seg .bars i.hot { background: #ff7a5a; box-shadow: 0 0 6px #ff7a5a; }
+  body.compact #rail, body.pinned #rail { opacity: 0; }
+
+  /* bottom status bar */
+  #bar { bottom: 54px; left: 50%; transform: translateX(-50%); width: min(800px, calc(100vw - 720px)); min-width: 560px; height: 152px; padding: 10px 18px 8px;
+         display: grid; grid-template-columns: 92px 1fr 150px; grid-template-rows: 1fr auto; gap: 0 16px; pointer-events: none;
+         clip-path: polygon(18px 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%, 0 18px); }
+  #emblem { width: 88px; height: 88px; align-self: center; }
+  #barmid { text-align: center; align-self: center; min-width: 0; }
+  #bartitle { font-size: 15px; letter-spacing: .32em; color: #dff9ff; text-shadow: 0 0 12px rgb(var(--c)); }
+  #barstate { font-size: 11px; letter-spacing: .3em; margin: 3px 0 4px; }
+  #wave { display: block; width: 100%; height: 40px; }
+  #phases { align-self: center; display: flex; flex-direction: column; gap: 2px; }
+  .phs { display: flex; align-items: center; gap: 9px; padding: 3px 8px; font-size: 10px; letter-spacing: .14em; opacity: .5; border: 1px solid transparent; border-radius: 14px; transition: all .25s; }
+  .phs i { width: 9px; height: 9px; border: 1.5px solid rgb(var(--c)); border-radius: 50%; }
+  .phs.on { opacity: 1; border-color: rgba(var(--c), .8); background: rgba(var(--c), .16); box-shadow: 0 0 12px rgba(var(--c), .4); }
+  .phs.on i { background: rgb(var(--c)); box-shadow: 0 0 8px rgb(var(--c)); }
+  #barhint { grid-column: 1 / -1; text-align: center; font-size: 9px; letter-spacing: .12em; opacity: .65; text-transform: none; padding-top: 2px; }
+  body.compact #bar, body.pinned #bar { opacity: 0 !important; }
 
   /* screen-corner frame (only with a clear desktop) */
   .frame { position: fixed; width: 46px; height: 46px; pointer-events: none; transition: opacity .6s; opacity: .55; }
@@ -79,7 +133,7 @@
   body.compact .frame, body.pinned .frame { opacity: 0; }
 
   /* captions + labels */
-  #caption { position: fixed; left: 50%; bottom: 70px; transform: translateX(-50%); width: 900px; max-width: 70vw;
+  #caption { position: fixed; left: 50%; bottom: 216px; transform: translateX(-50%); width: 900px; max-width: 70vw;
              text-align: center; transition: opacity .8s; opacity: 0; pointer-events: none; }
   #caption.show { opacity: 1; }
   #cap-user { color: rgba(var(--c), .65); font-size: 16px; margin-bottom: 8px; font-style: italic; }
@@ -101,26 +155,50 @@
   <canvas id="c"></canvas>
   <div class="frame tl"></div><div class="frame tr"></div><div class="frame bl"></div><div class="frame br"></div>
 
-  <div id="status" class="panel"><span id="name">JARVIS</span><b id="state">INITIALISING</b></div>
-
-  <div id="core" class="panel">
-    <div class="ph">Neural core</div>
-    <div class="kv"><span>Brain</span><span id="i-brain">--</span></div>
-    <div class="kv"><span>Voice</span><span id="i-voice">--</span></div>
-    <div class="kv"><span>Synapses firing</span><span id="i-syn">0</span></div>
-    <canvas id="eeg" width="240" height="38"></canvas>
+  <div id="diag" class="panel">
+    <h1 id="name">J.A.R.V.I.S.</h1><h2>SYSTEM DIAGNOSTICS <span id="ver"></span></h2>
+    <div class="drow"><div class="di"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg></div><div class="dl"><b>AI MODEL</b><i id="s-brain">Active</i></div><div class="dv" id="i-brain">--</div></div>
+    <div class="drow"><div class="di"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg></div><div class="dl"><b>AI PROVIDERS</b><i id="s-prov">Ready</i></div><div class="dv" id="i-prov">--</div></div>
+    <div class="drow"><div class="di"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></div><div class="dl"><b>VOICE</b><i id="s-voice">Idle</i></div><div class="dv" id="i-voice">--</div></div>
+    <div class="drow"><div class="di"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div><div class="dl"><b>CONNECTED APPS</b><i id="s-svc">Linked</i></div><div class="dv" id="i-svc">--</div></div>
+    <div class="drow"><div class="di"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="1"/><path d="M7 7v10M11 7v10M15 7v10M6 20v-3M10 20v-3M14 20v-3M18 20v-3"/></svg></div><div class="dl"><b>MEMORY</b><i id="s-mem">In use</i></div><div class="dv" id="i-mem">--</div></div>
+    <div class="drow"><div class="di"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></div><div class="dl"><b>STORAGE</b><i id="s-disk">Used</i></div><div class="dv" id="i-disk">--</div></div>
+    <div class="drow"><div class="di"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><div class="dl"><b>RUNNING FOR</b><i id="s-run">Since start</i></div><div class="dv" id="i-run">--</div></div>
+    <div class="drow"><div class="di"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="8" r="2"/><circle cx="8" cy="18" r="2"/><circle cx="17" cy="17" r="2"/><path d="M8 6l8 2M7 8l1 8M18 10l-1 5M10 18l5-1"/></svg></div><div class="dl"><b>NEURAL ACTIVITY</b><i id="s-syn">Synapses</i></div><div class="dv" id="i-syn">--</div></div>
+    <div id="dfoot"><span>STATUS</span><span class="on" id="state">INITIALISING</span></div>
   </div>
   <div id="log" class="panel"></div>
   <div id="timers" class="panel"></div>
 
-  <div id="dock" class="panel interactive"><div class="ph">Quick launch</div><div id="tiles"></div></div>
+  <div id="dock" class="panel interactive"><div class="ph">Quick launch <span class="cnt" id="dcount"></span></div><div id="tiles"></div></div>
 
   <div id="clockbox" class="panel"><div id="time">--:--</div><div id="date"></div><div id="secbar"><i id="secfill"></i></div></div>
   <div id="perf" class="panel">
     <div class="ph">Performance hub</div>
     <canvas id="perfc"></canvas>
-    <div id="procs"></div>
     <div id="sysline"><span id="up">UP --</span><span id="bat"></span></div>
+  </div>
+
+  <div id="radar" class="panel"><div class="ph">Process radar</div><canvas id="radarc"></canvas></div>
+
+  <div id="rail">
+    <div class="seg">CPU<span class="bars" id="r-cpu"></span></div>
+    <div class="seg">MEM<span class="bars" id="r-mem"></span></div>
+    <div class="seg">NET<span class="bars" id="r-net"></span></div>
+    <div class="seg">NEURAL<span class="bars" id="r-syn"></span></div>
+  </div>
+
+  <div id="bar" class="panel">
+    <canvas id="emblem"></canvas>
+    <div id="barmid"><div id="bartitle">J.A.R.V.I.S. AI CORE</div><div id="barstate">STANDING BY</div><canvas id="wave"></canvas></div>
+    <div id="phases">
+      <div class="phs" data-p="listening"><i></i>LISTENING</div>
+      <div class="phs" data-p="thinking"><i></i>THINKING</div>
+      <div class="phs" data-p="planning"><i></i>PLANNING</div>
+      <div class="phs" data-p="executing"><i></i>EXECUTING</div>
+      <div class="phs" data-p="responding"><i></i>RESPONDING</div>
+    </div>
+    <div id="barhint">Say "Hey Jarvis" · hold the orb to talk · or press Ctrl+Alt+J</div>
   </div>
 
   <div id="corner"><span id="cstate"></span><span id="hint">HOLD: TALK · RIGHT-DRAG: MOVE</span></div>
@@ -129,6 +207,7 @@
 <script src="layout.js"></script>
 <script src="brain.js"></script>
 <script src="perf.js"></script>
+<script src="scenery.js"></script>
 <script src="renderer.js"></script>
 </body>
 </html>

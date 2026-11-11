@@ -33,7 +33,7 @@ function setPin(p) {
   try { p ? localStorage.setItem('jarvis.orbpin', JSON.stringify(p)) : localStorage.removeItem('jarvis.orbpin'); } catch (e) { /* storage unavailable: fine */ }
 }
 
-const S = { wins: [], compact: 0, state: 'loading', followup: false, level: 0, target: 0, prom: 0, hold: 0,
+const S = { idle: 'center', procs: [], exec: false, planned: false, info: null, wins: [], compact: 0, state: 'loading', followup: false, level: 0, target: 0, prom: 0, hold: 0,
             color: [...COLORS.loading], t: 0, pin: loadPin(), timers: [] };
 let pttActive = false;
 const eff = () => (pttActive && (S.state === 'idle' || S.state === 'speaking') ? 'listening' : S.state);
@@ -42,7 +42,22 @@ function refreshLabel() {
   const st = eff();
   const lbl = (LABEL[st] || st).toUpperCase() + (S.followup && st === 'idle' ? ' · LISTENING' : '');
   $('state').textContent = lbl; $('cstate').textContent = lbl;
+  $('s-voice').textContent = st === 'speaking' ? 'Speaking' : st === 'listening' ? 'Listening' : st === 'idle' ? 'Standing by' : 'Busy';
   document.body.classList.toggle('dim', st === 'idle' && !S.followup);
+}
+
+// which stage Jarvis is in, for the status bar: listening / thinking / planning / executing / responding
+function phase() {
+  const st = eff();
+  if (st === 'listening') return 'listening';
+  if (st === 'speaking') return 'responding';
+  if (st === 'thinking') return S.exec ? 'executing' : S.planned ? 'planning' : 'thinking';
+  return null;
+}
+function updatePhases() {
+  const p = phase();
+  document.querySelectorAll('.phs').forEach((el) => el.classList.toggle('on', el.dataset.p === p));
+  $('barstate').textContent = p ? p.toUpperCase() : (S.state === 'loading' ? 'INITIALISING' : 'AWAITING WAKE WORD');
 }
 function setState(st, followup = false) { S.state = st; S.followup = followup; refreshLabel(); }
 
@@ -62,16 +77,21 @@ function addLog(text) {
 function buildTiles(items) {
   const box = $('tiles');
   box.replaceChildren();
+  $('dcount').textContent = items.length ? '· ' + items.length + ' LINKS' : '';
   if (!items.length) {
     const d = document.createElement('div'); d.className = 'empty';
     d.textContent = 'Add launcher: items in settings.yaml'; box.appendChild(d); return;
   }
   items.forEach((it, i) => {
     const t = document.createElement('div'); t.className = 'tile interactive'; t.title = it.name;
+    const inner = document.createElement('div'); inner.className = 'in';
     const ic = document.createElement('div'); ic.className = 'ic'; ic.textContent = it.icon;
     const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = it.name;
-    t.append(ic, nm);
-    t.addEventListener('click', () => { addLog('Launching ' + it.name); send({ type: 'launch', index: i }); });
+    inner.append(ic, nm); t.appendChild(inner);
+    t.addEventListener('click', () => {
+      t.classList.remove('fire'); void t.offsetWidth; t.classList.add('fire');
+      addLog('Launching ' + it.name); send({ type: 'launch', index: i });
+    });
     box.appendChild(t);
   });
 }
@@ -79,33 +99,62 @@ function buildTiles(items) {
 function handle(m) {
   switch (m.type) {
     case 'state':
+      if (m.state === 'idle' || m.state === 'listening') { S.exec = false; S.planned = false; }
       setState(m.state, !!m.followup);
       if (m.state === 'idle') fadeCaptionSoon();
       break;
     case 'level': S.target = Math.max(S.target, m.value); break;
     case 'transcript':
       showCaption();
+      if (m.role === 'user') { S.exec = false; S.planned = false; }
       if (m.role === 'alert') { $('cap-user').textContent = '⏰'; $('cap-ai').textContent = m.text; }
       else if (m.role === 'user') { $('cap-user').textContent = '“' + m.text + '”'; $('cap-ai').textContent = ''; }
       else { $('cap-ai').textContent += (($('cap-ai').textContent ? ' ' : '') + m.text); }
       break;
-    case 'tool': addLog('Executing ' + m.name + (m.input && m.input.name ? ': ' + m.input.name : '')); break;
-    case 'tool_result': addLog(m.result); break;
+    case 'tool': S.exec = true; addLog('Executing ' + m.name + (m.input && m.input.name ? ': ' + m.input.name : '')); break;
+    case 'tool_result': S.exec = false; S.planned = true; addLog(m.result); break;
     case 'log': addLog(m.text); break;
     case 'timers': S.timers = m.items || []; drawTimers(); break;
     case 'error': addLog('ERROR: ' + m.text); break;
     case 'desktop': S.wins = m.windows || []; updateCovered(); break;
     case 'launcher': buildTiles(m.items || []); break;
-    case 'info':
-      $('i-brain').textContent = ((m.provider || '') + (m.model ? ' · ' + String(m.model).replace(/^models\//, '') : '')).toUpperCase().slice(0, 30);
-      $('i-voice').textContent = (m.voice || '--').toUpperCase();
-      break;
-    case 'stats': Perf.update(m); Perf.text({ procs: $('procs'), up: $('up'), bat: $('bat') }); break;
+    case 'config': S.idle = m.idle_position === 'corner' ? 'corner' : 'center'; break;
+    case 'info': showInfo(m); break;
+    case 'stats': onStats(m); break;
   }
 }
 
+function setText(id, v, title) { const el = $(id); el.textContent = v; if (title) el.title = title; }
+function showInfo(m) {
+  S.info = m;
+  const model = String(m.model || '').replace(/^models\//, '');
+  setText('i-brain', model || (m.provider || '--'), model);
+  setText('s-brain', 'Active');
+  setText('i-voice', (m.voice || '--').toUpperCase());
+  const sv = m.services || [], ok = sv.filter((x) => x.ok);
+  const ai = sv.filter((x) => x.name === 'Gemini' || x.name === 'Claude' || x.name === 'ElevenLabs');
+  setText('i-prov', ai.filter((x) => x.ok).length + ' available', ai.filter((x) => x.ok).map((x) => x.name).join(', '));
+  setText('i-svc', ok.length + ' of ' + sv.length, ok.map((x) => x.name).join(', '));
+  $('ver').textContent = m.version ? 'v' + m.version : '';
+}
+function setBars(id, frac, hotAt = 0.85) {
+  const box = $(id);
+  if (!box.children.length) for (let i = 0; i < 14; i++) box.appendChild(document.createElement('i'));
+  const n = Math.round(Math.max(0, Math.min(1, frac)) * box.children.length);
+  [...box.children].forEach((el, i) => { el.className = i < n ? (i / box.children.length >= hotAt ? 'hot' : 'on') : ''; });
+}
+function onStats(m) {
+  Perf.update(m); Perf.text({ up: $('up'), bat: $('bat') });
+  S.procs = m.procs || [];
+  setText('i-mem', Math.round(m.mem) + '%'); setText('s-mem', m.mem_used + ' / ' + Math.round(m.mem_total) + ' GB');
+  setText('i-disk', Math.round(m.disk) + '%'); setText('s-disk', m.disk_used + ' / ' + m.disk_total + ' GB');
+  setText('i-run', Perf.fmtUptime(m.jarvis_up || 0));
+  setBars('r-cpu', m.cpu / 100); setBars('r-mem', m.mem / 100);
+  setBars('r-net', Math.log10(1 + (m.net_down || 0) + (m.net_up || 0)) / Math.log10(1 + 20000), 0.9);
+}
+
 // ---------- window awareness ----------
-const PANELS = ['status', 'core', 'log', 'timers', 'dock', 'clockbox', 'perf'];
+const PANELS = ['diag', 'log', 'timers', 'dock', 'clockbox', 'perf', 'radar'];
 function updateCovered() {
   document.body.classList.toggle('compact', Layout.isCompact(S.wins));
   for (const id of PANELS) {
@@ -143,23 +192,9 @@ function tick() {
 }
 setInterval(tick, 250); tick();
 
-// ---------- neural activity trace ----------
-const eeg = [];
-setInterval(() => { eeg.push(S.level); while (eeg.length > 120) eeg.shift(); }, 50);
-function drawEeg(c) {
-  const cv = $('eeg'), g = cv.getContext('2d'), w = cv.width, h = cv.height;
-  g.clearRect(0, 0, w, h);
-  g.strokeStyle = `rgba(${c.map(Math.round).join(',')},.18)`; g.lineWidth = 1;
-  g.beginPath(); g.moveTo(0, h / 2); g.lineTo(w, h / 2); g.stroke();
-  g.strokeStyle = `rgba(${c.map(Math.round).join(',')},.95)`; g.lineWidth = 1.4; g.beginPath();
-  const busy = S.state !== 'idle' && S.state !== 'loading';
-  eeg.forEach((v, i) => {
-    const x = (i / 119) * w, a = (busy ? 0.15 : 0.05) + v * 0.85;
-    const y = h / 2 + Math.sin(i * 1.3 + S.t * 9) * Math.cos(i * 0.37) * a * (h / 2 - 3);
-    i ? g.lineTo(x, y) : g.moveTo(x, y);
-  });
-  g.stroke();
-}
+// ---------- audio history for the status-bar waveform ----------
+const waveArr = new Array(64).fill(0);
+setInterval(() => { waveArr.push(Math.min(1, S.level * (0.45 + Math.random() * 0.9))); waveArr.shift(); }, 45);
 
 // ---------- canvas: orb + digital brain + audio visuals ----------
 const cv = $('c'), ctx = cv.getContext('2d');
@@ -170,11 +205,10 @@ function resize() {
   cv.width = W * dpr; cv.height = H * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
-addEventListener('resize', resize); resize();
+addEventListener('resize', () => { resize(); Scenery.init(W, H); }); resize(); Scenery.init(W, H);
 
 const NBARS = 72;
 const bars = new Array(NBARS).fill(0);
-const lin = new Array(56).fill(0);
 const rgba = (c, a) => `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
 const brain = new BrainViz.Brain(7);
 const orbNow = { x: 0, y: 0, R: 40 };
@@ -214,7 +248,7 @@ function frame(ms) {
   const wantC = Layout.isCompact(S.wins) ? 1 : 0;
   S.compact += (wantC - S.compact) * 0.07;
   const cm = S.compact * S.compact * (3 - 2 * S.compact);
-  const { x: cx, y: cy, R } = Layout.orb(W, H, cm, k, S.pin);
+  const { x: cx, y: cy, R } = Layout.orb(W, H, cm, k, S.pin, S.idle);
   orbNow.x = cx; orbNow.y = cy; orbNow.R = R;
   const speed = st === 'thinking' ? 3.2 : st === 'listening' ? 1.2 : 0.55;
 
@@ -227,23 +261,14 @@ function frame(ms) {
   document.body.classList.toggle('pinned', !!S.pin);
   if (follow) placeFollowers(cx, cy, R);
 
-  const alpha = 0.45 + 0.55 * Math.max(k * (1 - cm), cm * 0.55, S.pin ? 0.6 : 0, st === 'loading' ? 0.6 : 0);
+  const alpha = 0.45 + 0.55 * Math.max(k * (1 - cm), cm * 0.55, S.pin ? 0.6 : 0, st === 'loading' ? 0.6 : 0, S.idle === 'center' ? 0.7 * (1 - cm) : 0);
   const big = 1 - cm;   // how "full size" the HUD is (radar, waveform)
 
-  // radar sweep + expanding pings around the orb when the desktop is clear
-  if (big > 0.05 && !S.pin) {
-    const rr = R * 3.1;
-    for (let i = 0; i < 3; i++) {
-      const ph = ((t * 0.22 + i / 3) % 1), r = rr + ph * R * 2.2;
-      ctx.strokeStyle = rgba(c, 0.18 * (1 - ph) * big * (0.4 + 0.6 * k)); ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.stroke();
-    }
-    const sw = t * 0.9;
-    const g = ctx.createConicGradient ? ctx.createConicGradient(sw, cx, cy) : null;
-    if (g) {
-      g.addColorStop(0, rgba(c, 0.20 * big * (0.3 + 0.7 * k))); g.addColorStop(0.08, rgba(c, 0)); g.addColorStop(1, rgba(c, 0));
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, rr * 1.25, 0, 7); ctx.fill();
-    }
+  const scenic = big > 0.05 && !S.pin;          // full command-center scenery only on a clear desktop
+  const sa = Math.min(1, alpha + 0.2) * big;
+  if (scenic) {
+    Scenery.drawBackground(ctx, t, dt, c, big);
+    Scenery.drawPlatform(ctx, cx, cy, R, t, c, sa, lv);
   }
 
   // glow
@@ -269,7 +294,8 @@ function frame(ms) {
 
   // arc-reactor rings
   ctx.lineWidth = 2;
-  const rings = [[R * 1.25, 3, 0.7, 1], [R * 1.05, 5, 0.55, -1.4], [R * 0.9, 2, 0.8, 2.1]];
+  const showGlobe = R > 38;
+  const rings = showGlobe ? [[R * 1.25, 3, 0.7, 1]] : [[R * 1.25, 3, 0.7, 1], [R * 1.05, 5, 0.55, -1.4], [R * 0.9, 2, 0.8, 2.1]];
   for (const [rr, segs, frac, dir] of rings) {
     const base = t * speed * dir;
     for (let s = 0; s < segs; s++) {
@@ -301,6 +327,14 @@ function frame(ms) {
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, R * 0.85, 0, 7); ctx.fill();
   brain.update(dt, st, lv);
   brain.draw(ctx, cx, cy, R, t, c, Math.min(1, alpha + 0.25));
+  if (showGlobe) Scenery.drawGlobe(ctx, cx, cy, R * 1.0, t, c, Math.min(1, alpha + 0.2), lv);
+  if (scenic) {
+    Scenery.drawOrbits(ctx, cx, cy, R, t, c, sa);
+    if (W >= 1700) {
+      const inf = S.info || {};
+      Scenery.drawCallouts(ctx, cx, cy, R, t, c, sa * (0.5 + 0.5 * k), [['Neural net', 'Online'], ['Voice', inf.voice || '--'], ['Brain', inf.provider || '--'], ['Link', 'Secure']]);
+    }
+  }
   if (frameNo % 15 === 0) { $('i-syn').textContent = brain.firing; }
 
   // thinking: orbiting dots
@@ -312,22 +346,15 @@ function frame(ms) {
     }
   }
 
-  // linear waveform under the captions (big, unpinned layout only)
-  const lk = k * big * (S.pin ? 0 : 1);
-  if (lk > 0.02) {
-    const n = lin.length, bw = 6, gap = 5, total = n * (bw + gap), x0 = W / 2 - total / 2, yb = H - 26;
-    for (let i = 0; i < n; i++) {
-      const env = Math.sin((i / (n - 1)) * Math.PI);
-      const wob = 0.4 + 0.6 * Math.abs(Math.sin(i * 0.9 + t * 7) * Math.cos(i * 0.4 - t * 4));
-      const want = (st === 'listening' || st === 'speaking') ? lv * wob * env : 0.02 * env;
-      lin[i] += (want - lin[i]) * 0.4;
-      const h = 3 + lin[i] * 46;
-      ctx.fillStyle = rgba(c, (0.4 + 0.6 * lin[i]) * lk);
-      ctx.fillRect(x0 + i * (bw + gap), yb - h / 2, bw, h);
+  if (frameNo % 3 === 0) { Perf.draw($('perfc'), c); }
+  if (frameNo % 2 === 0) {
+    Scenery.drawRadar($('radarc'), S.procs, t, c);
+    if (big > 0.2 && !S.pin) {
+      Scenery.drawEmblem($('emblem'), t, c, k); Scenery.drawWave($('wave'), waveArr, c, st !== 'idle', t);
+      setBars('r-syn', brain.firing / 70, 0.9);
     }
   }
-
-  if (frameNo % 3 === 0) { drawEeg(c); Perf.draw($('perfc'), c); }
+  if (frameNo % 6 === 0) updatePhases();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

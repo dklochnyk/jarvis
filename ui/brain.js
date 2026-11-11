@@ -105,7 +105,7 @@
       for (let i = 0; i < nodes.length; i++) {
         const d = (P[i * 3 + 2] + 0.56) / 1.12, g = nodes[i].g;
         const r = (0.8 + 1.0 * d + g * 1.5) * u;
-        ctx.fillStyle = g > 0.05 ? `rgba(${255 * g * 0.7 + c[0] * (1 - g * 0.7) | 0},${255 * g * 0.7 + c[1] * (1 - g * 0.7) | 0},${255 * g * 0.7 + c[2] * (1 - g * 0.7) | 0},${Math.min(1, (0.35 + 0.35 * d + g) * alpha)})` : col((0.22 + 0.4 * d) * alpha);
+        ctx.fillStyle = g > 0.05 ? `rgba(${255 * g * 0.5 + c[0] * (1 - g * 0.5) | 0},${255 * g * 0.5 + c[1] * (1 - g * 0.5) | 0},${255 * g * 0.5 + c[2] * (1 - g * 0.5) | 0},${Math.min(1, (0.35 + 0.35 * d + g) * alpha)})` : col((0.22 + 0.4 * d) * alpha);
         ctx.beginPath(); ctx.arc(P[i * 3], P[i * 3 + 1], r, 0, 6.2832); ctx.fill();
       }
       // travelling signals with a short tail

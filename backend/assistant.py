@@ -97,8 +97,19 @@ class Jarvis:
         self.max_rec = float(self.cfg.get("max_record_seconds", 20))
         self.followup = float(self.cfg.get("followup_seconds", 7))
         model = getattr(self.brain, "model", None) or self.cfg.get("model", "")
+        from updater import read_version
+
+        env = os.environ.get
+        services = [
+            {"name": "Gemini", "ok": bool(env("GEMINI_API_KEY") or env("GOOGLE_API_KEY"))},
+            {"name": "Claude", "ok": bool(env("ANTHROPIC_API_KEY"))},
+            {"name": "ElevenLabs", "ok": bool(env("ELEVENLABS_API_KEY"))},
+            {"name": "Spotify", "ok": os.path.exists(os.path.join(voice.ROOT, ".spotify_cache"))},
+            {"name": "Updater", "ok": bool((self.cfg.get("update") or {}).get("repo"))},
+        ]
         self.emit(type="info", provider=self.cfg.get("provider", "claude"), model=str(model),
-                  voice=(self.cfg.get("tts") or {}).get("provider", "piper"))
+                  voice=(self.cfg.get("tts") or {}).get("provider", "piper"),
+                  version=read_version(voice.ROOT).get("short") or "local", services=services)
 
     # ---- main loop ----------------------------------------------------------
     def run(self):

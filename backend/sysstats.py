@@ -13,6 +13,7 @@ class Sampler:
         self.n = 0
         self.procs = []
         self._cache = {}
+        self.started = time.time()
         self.ncpu = psutil.cpu_count() or 1
         self.disk_path = os.environ.get("SystemDrive", "C:") + "\\" if os.name == "nt" else "/"
 
@@ -39,7 +40,7 @@ class Sampler:
         for pid in list(self._cache):
             if pid not in seen:
                 del self._cache[pid]
-        top = sorted(totals.items(), key=lambda kv: -kv[1])[:3]
+        top = sorted(totals.items(), key=lambda kv: -kv[1])[:8]
         return [[n, round(v, 1)] for n, v in top]
 
     def sample(self):
@@ -79,5 +80,6 @@ class Sampler:
             "battery": round(bat.percent) if bat else None,
             "plugged": bool(bat.power_plugged) if bat else None,
             "uptime": int(now - psutil.boot_time()),
+            "jarvis_up": int(now - self.started),
             "procs": self.procs,
         }
