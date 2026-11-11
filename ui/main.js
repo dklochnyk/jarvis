@@ -118,6 +118,8 @@ app.whenReady().then(() => {
 
   globalShortcut.register(HOTKEY, () => win && win.webContents.send('hotkey'));
   globalShortcut.register(HUD_TOGGLE, () => win && win.webContents.send('toggle-hud'));
+  globalShortcut.register('CommandOrControl+Alt+R', () => win && win.webContents.send('reset-orb'));   // put everything back
+  globalShortcut.register('CommandOrControl+Alt+S', () => { screenCfg.span = !screenCfg.span; saveScreenCfg(); placeWindow(true); });  // span all screens on/off
 
   tray = new Tray(nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'tray.png')));
   tray.setToolTip('Jarvis');
