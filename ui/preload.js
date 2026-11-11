@@ -6,5 +6,6 @@ contextBridge.exposeInMainWorld('jarvis', {
   onResetOrb: (cb) => ipcRenderer.on('reset-orb', cb),
   onLock: (cb) => ipcRenderer.on('lock-panels', cb),
   onScreens: (cb) => ipcRenderer.on('screens', cb),
+  onQuality: (cb) => ipcRenderer.on('quality', cb),
   setInteractive: (on) => ipcRenderer.send('interactive', !!on),
 });

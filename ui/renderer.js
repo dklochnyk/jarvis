@@ -225,13 +225,21 @@ function applyHome() {
   st.left = HX + 'px'; st.top = HY + 'px'; st.width = W + 'px'; st.height = H + 'px';
   Scenery.init(W, H);
 }
-function resize() {
+// Visual quality: 0 low / 1 medium / 2 high. Sets the frame-rate cap and the drawing resolution (the big CPU/GPU costs).
+let QUALITY = 1;
+const FPS_CAP = [20, 30, 45];
+function renderScale() {
   const dpr = window.devicePixelRatio || 1;
+  return QUALITY === 0 ? Math.min(dpr, 1) * 0.7 : QUALITY === 1 ? Math.min(dpr, 1.25) : Math.min(dpr, 2);
+}
+function resize() {
+  const sc = renderScale();
   CW = innerWidth; CH = innerHeight;
-  cv.width = CW * dpr; cv.height = CH * dpr;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  cv.width = Math.round(CW * sc); cv.height = Math.round(CH * sc);
+  ctx.setTransform(sc, 0, 0, sc, 0, 0);
   applyHome();
 }
+window.jarvis.onQuality && window.jarvis.onQuality((_e, q) => { QUALITY = Math.max(0, Math.min(2, q | 0)); hero.detail = QUALITY; resize(); addLog('Visual quality: ' + ['low', 'medium', 'high'][QUALITY]); });
 addEventListener('resize', resize); resize();
 window.jarvis.onScreens && window.jarvis.onScreens((_e, m) => {
   S.phys = m.phys || null;
@@ -244,7 +252,7 @@ const NBARS = 72;
 const bars = new Array(NBARS).fill(0);
 const rgba = (c, a) => `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
 const brain = new BrainViz.Brain(7);
-const hero = new HeroViz.Hero(21);
+const hero = new HeroViz.Hero(21); hero.detail = 1;
 let brainAct = 0;
 const orbNow = { x: 0, y: 0, R: 40 };
 let frameNo = 0, lastFollow = null;
@@ -314,7 +322,15 @@ function placeFollowers(cx, cy, R) {
   lab.textAlign = f.label.onLeft ? 'right' : 'left';
 }
 
+let lastDraw = 0;
 function frame(ms) {
+  // frame-rate cap: lower when nothing is happening, and almost off while the HUD is hidden
+  const hidden = $('hud').classList.contains('hidden');
+  const quiet = S.state === 'idle' && !(S.sp && S.sp.playing);
+  const fps = hidden ? 3 : Math.min(FPS_CAP[QUALITY], quiet ? 24 : 99);
+  if (ms - lastDraw < 1000 / fps - 3) { requestAnimationFrame(frame); return; }
+  lastDraw = ms;
+  if (hidden) { ctx.clearRect(0, 0, CW, CH); requestAnimationFrame(frame); return; }
   const t = ms / 1000, dt = Math.min(0.05, t - S.t); S.t = t; frameNo++;
   ctx.clearRect(0, 0, CW, CH);
   ctx.save(); ctx.translate(HX, HY);   // everything below is drawn relative to the home screen

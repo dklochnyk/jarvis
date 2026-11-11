@@ -11,7 +11,7 @@
                font-family: "Segoe UI", "Consolas", sans-serif; user-select: none; }
   #hud { position: fixed; inset: 0; transition: opacity .6s; }
   #hud.hidden { opacity: 0; }
-  canvas#c { position: fixed; inset: 0; pointer-events: none; }
+  canvas#c { position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; pointer-events: none; }
   #stage { position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; transform: translateZ(0); }   /* the home screen: fixed children are placed against it */
 
   /* ---- panels: free-form text floating on the desktop (no boxes). Plates return when a window is open. ---- */
@@ -22,7 +22,7 @@
   .panel::before { top: -1px; left: -1px; border-top: 2px solid rgb(var(--c)); border-left: 2px solid rgb(var(--c)); }
   .panel::after { bottom: -1px; right: -1px; border-bottom: 2px solid rgb(var(--c)); border-right: 2px solid rgb(var(--c)); }
   body.compact .panel { padding: 10px 14px; background: linear-gradient(180deg, rgba(4, 16, 28, .72), rgba(3, 10, 20, .6));
-                        border: 1px solid rgba(var(--c), .25); backdrop-filter: blur(5px); }
+                        border: 1px solid rgba(var(--c), .25); }
   body.compact .panel::before, body.compact .panel::after { display: block; }
   .ph { font-size: 10px; letter-spacing: .28em; opacity: .75; margin: -2px 0 8px; display: flex; align-items: center; gap: 8px; }
   .ph::before { content: ""; width: 6px; height: 6px; background: rgb(var(--c)); box-shadow: 0 0 8px rgb(var(--c)); }

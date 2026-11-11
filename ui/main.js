@@ -3,6 +3,9 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 
+// use the GPU even if Chromium's blocklist would push drawing onto the CPU (a common cause of 100% CPU)
+app.commandLine.appendSwitch('ignore-gpu-blocklist');
+app.commandLine.appendSwitch('enable-gpu-rasterization');
 const HOTKEY = process.env.JARVIS_HOTKEY || 'CommandOrControl+Alt+J';      // talk to / interrupt Jarvis
 const HUD_TOGGLE = process.env.JARVIS_HUD_KEY || 'CommandOrControl+Alt+H'; // show / hide the HUD
 const DEMO = process.argv.includes('--demo') || !!process.env.JARVIS_DEMO;
@@ -28,7 +31,7 @@ function startBackend() {
 
 // ---- which screen(s) the HUD lives on: one chosen monitor, or one overlay spanning every monitor ----
 const SCREEN_FILE = () => path.join(app.getPath('userData'), 'screen.json');
-let screenCfg = { span: false, home: null };
+let screenCfg = { span: false, home: null, quality: 1 };
 function loadScreenCfg() { try { screenCfg = { ...screenCfg, ...JSON.parse(fs.readFileSync(SCREEN_FILE(), 'utf8')) }; } catch (e) { /* first run */ } }
 function saveScreenCfg() { try { fs.writeFileSync(SCREEN_FILE(), JSON.stringify(screenCfg)); } catch (e) { /* fine */ } }
 const homeDisplay = () => screen.getAllDisplays().find((d) => d.id === screenCfg.home) || screen.getPrimaryDisplay();
@@ -50,6 +53,7 @@ function placeWindow(changed = false) {
   win.setBounds(bounds);                                                     // twice: Windows can misplace it across mixed-DPI screens
   const hb = home.bounds;
   const homeRel = { x: hb.x - b.x, y: hb.y - b.y, w: hb.width, h: Math.min(hb.height, bounds.y + bounds.height - hb.y) };
+  win.webContents.send('quality', screenCfg.quality);
   win.webContents.send('screens', {
     changed,
     home: homeRel,
@@ -100,6 +104,13 @@ function buildTray() {
     {
       label: 'Span all screens (move panels between monitors)', type: 'checkbox', checked: !!screenCfg.span,
       click: (item) => { screenCfg.span = item.checked; saveScreenCfg(); placeWindow(true); },
+    },
+    {
+      label: 'Visual quality (lower = less CPU)',
+      submenu: ['Low (20 fps)', 'Medium (30 fps)', 'High (45 fps)'].map((label, q) => ({
+        label, type: 'radio', checked: screenCfg.quality === q,
+        click: () => { screenCfg.quality = q; saveScreenCfg(); win.webContents.send('quality', q); },
+      })),
     },
     { label: 'Reset layout (positions and sizes)', click: () => win.webContents.send('reset-orb') },
     { label: 'Lock / unlock panels (click-through)', click: () => win.webContents.send('lock-panels') },

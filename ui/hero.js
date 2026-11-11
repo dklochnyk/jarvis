@@ -174,17 +174,17 @@
 
       // region glows
       for (const g of REGIONS) {
-        const w = this.w[g]; if (w < 0.45 || !this.anchor[g] || g === 'deep' || g === 'stem') continue;
+        const w = this.w[g]; if (this.detail === 0 || w < 0.45 || !this.anchor[g] || g === 'deep' || g === 'stem') continue;
         const [ax, ay] = this.anchor[g], rr = R * 0.42;
         const gr = ctx.createRadialGradient(ax, ay, 0, ax, ay, rr);
         gr.addColorStop(0, col(0.22 * w * alpha)); gr.addColorStop(1, col(0));
         ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(ax, ay, rr, 0, TAU); ctx.fill();
       }
       // wiring (far / near)
-      const E = this.edges;
+      const E = this.edges, step = this.detail === 0 ? 2 : 1;
       for (let pass = 0; pass < 2; pass++) {
         ctx.beginPath();
-        for (let k = 0; k < E.length; k++) {
+        for (let k = 0; k < E.length; k += step) {
           const a = E[k][0], b = E[k][1], near = P[a * 3 + 2] + P[b * 3 + 2] > 0;
           if (near !== (pass === 1)) continue;
           ctx.moveTo(P[a * 3], P[a * 3 + 1]); ctx.lineTo(P[b * 3], P[b * 3 + 1]);

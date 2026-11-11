@@ -80,7 +80,7 @@ def _make_dpi_aware():
 
 
 class DesktopWatcher(threading.Thread):
-    def __init__(self, emit, cfg=None, interval=0.6):
+    def __init__(self, emit, cfg=None, interval=1.0):
         super().__init__(daemon=True)
         self.emit, self.interval = emit, interval
         self.ignore = {str(x).lower().removesuffix(".exe") for x in ((cfg or {}).get("ignore_apps") or [])}
