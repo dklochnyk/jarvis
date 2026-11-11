@@ -90,6 +90,14 @@ A private repo needs a read-only token in `.env` as `GITHUB_TOKEN=...`.
 or `elevenlabs` (best quality; put `ELEVENLABS_API_KEY` in `.env` and change `voice_id`). If a provider
 can't load, Jarvis falls back to `sapi` and says so in the HUD log.
 
+**Jarvis voice (ElevenLabs).** The default `voice_id` is your "Jarvis" voice. To use it: put `ELEVENLABS_API_KEY=...` in `.env`
+(elevenlabs.io > profile > API keys), add this to `settings.yaml`, then restart:
+
+    tts:
+      provider: elevenlabs
+
+Tweak `tts.elevenlabs.speed` (0.7 - 1.2) in `settings.yaml` if it talks too fast or slow.
+
 **Personality.** Edit the system prompt in `backend/brain.py`.
 
 **Your own folders.** Add them under `folders:` in `settings.yaml` and say "open <name>".

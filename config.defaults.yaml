@@ -40,7 +40,7 @@ tts:
   sapi:
     rate: 205
   elevenlabs:
-    voice_id: JBFqnCBsd6RMkjVDRZzb     # swap for any voice in your ElevenLabs library
+    voice_id: aFSXdzJmvaw5QWGBUCw6     # "Jarvis" (British butler) from your ElevenLabs voices; swap for any voice id
     model_id: eleven_flash_v2_5
     speed: 1.1             # 0.7 - 1.2
 
