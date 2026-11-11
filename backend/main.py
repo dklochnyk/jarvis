@@ -203,7 +203,8 @@ def main():
     hub.emit(type="launcher", items=Launcher(cfg).public())
     from audiotap import SpectrumTap
 
-    SpectrumTap(hub.emit).start()
+    if (cfg.get("hud") or {}).get("real_spectrum", True):
+        SpectrumTap(hub.emit).start()   # set hud: real_spectrum: false in settings.yaml to turn this off
     if args.demo:
         threading.Thread(target=demo_loop, args=(hub,), daemon=True).start()
     else:
