@@ -128,6 +128,7 @@ class Tools:
             Timers(announce, emit),
             SelfUpdate(cfg, ROOT, request_restart or (lambda: False)),
         ]
+        self.spotify = next(c for c in components if isinstance(c, SpotifyCtl))
         self.registry = {}
         for comp in components:
             for attr in dir(comp):

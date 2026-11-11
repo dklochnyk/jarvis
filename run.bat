@@ -27,9 +27,9 @@ if not exist ui\node_modules\electron\dist\electron.exe (
 )
 
 rem Make sure newer libraries are present
-.venv\Scripts\python.exe -c "import google.genai, spotipy, pycaw" >nul 2>nul || (
+.venv\Scripts\python.exe -c "import google.genai, spotipy, pycaw, soundcard" >nul 2>nul || (
   echo Installing new libraries...
-  .venv\Scripts\python.exe -m pip install google-genai spotipy pycaw
+  .venv\Scripts\python.exe -m pip install google-genai spotipy pycaw soundcard
 )
 
 if /i "%1"=="demo" set JARVIS_DEMO=1

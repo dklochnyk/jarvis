@@ -140,5 +140,7 @@ launcher:
 - **Performance hub:** CPU, memory and disk gauges, 60-second load and network charts, per-core bars and the top programs.
 - **Neural core:** the brain in the middle fires faster while Jarvis is thinking and pulses with his voice.
 
-- **Center stage:** on a clear desktop the core sits big in the middle (globe, orbit rings, hologram platform). Prefer it small in the corner? Set `hud: idle_position: corner` in `settings.yaml`.
+- **Center stage:** on a clear desktop the main screen is free-form (no boxes) around a big anatomical digital brain. Its regions light up as Jarvis listens, thinks, plans, acts and speaks. The movable Jarvis core sits in the bottom-right corner; drag it with the right mouse button as before.
+- **Spotify player:** with no windows open, a now-playing player (art, title, prev/play/next, progress) sits under the brain with a live spectrum of whatever your PC is playing (needs `spotify-login.bat` done once; falls back to a simulated spectrum if audio capture is unavailable).
+- **With a window open:** everything shrinks to a small core in the corner and panels get out of the way.
 - **Diagnostics, process radar, status bar:** live model/provider/voice/app status, a radar of your busiest programs, and a bar showing Listening / Thinking / Planning / Executing / Responding. They tuck away when a window is open.

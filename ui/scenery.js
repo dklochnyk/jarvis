@@ -236,7 +236,26 @@
     ctx.globalAlpha = 1;
   }
 
-  const api = { init, drawBackground, drawGlobe, drawOrbits, drawPlatform, drawCallouts, drawRadar, drawEmblem, drawWave, hash, mulberry };
+  // ---------------------------------------------------------------- spectrum analyser (player)
+  const peaks = new Array(40).fill(0);
+  function drawSpectrum(cv, arr, c, t) {
+    const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+    if (cv.width !== W * dpr) { cv.width = W * dpr; cv.height = H * dpr; }
+    const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+    const n = arr.length, bw = W / n, base = H * 0.66, maxH = H * 0.62;
+    for (let i = 0; i < n; i++) {
+      const v = Math.max(0, Math.min(1, arr[i])), h = 2 + v * maxH, x = i * bw + 1.5, w = bw - 3;
+      const g = ctx.createLinearGradient(0, base - h, 0, base);
+      g.addColorStop(0, rgba(c, 1)); g.addColorStop(1, rgba(c, 0.35));
+      ctx.fillStyle = g; ctx.fillRect(x, base - h, w, h);
+      peaks[i] = Math.max(peaks[i] - 0.012, v);
+      ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fillRect(x, base - 3 - peaks[i] * maxH, w, 2);
+      ctx.fillStyle = rgba(c, 0.22 * (0.3 + v)); ctx.fillRect(x, base + 3, w, Math.min(H - base - 3, h * 0.45));   // reflection
+    }
+    ctx.strokeStyle = rgba(c, 0.4); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, base + 1.5); ctx.lineTo(W, base + 1.5); ctx.stroke();
+  }
+
+  const api = { init, drawSpectrum, drawBackground, drawGlobe, drawOrbits, drawPlatform, drawCallouts, drawRadar, drawEmblem, drawWave, hash, mulberry };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Scenery = api;
 })(typeof window !== 'undefined' ? window : globalThis);

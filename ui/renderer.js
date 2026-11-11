@@ -33,7 +33,7 @@ function setPin(p) {
   try { p ? localStorage.setItem('jarvis.orbpin', JSON.stringify(p)) : localStorage.removeItem('jarvis.orbpin'); } catch (e) { /* storage unavailable: fine */ }
 }
 
-const S = { idle: 'center', procs: [], exec: false, planned: false, info: null, wins: [], compact: 0, state: 'loading', followup: false, level: 0, target: 0, prom: 0, hold: 0,
+const S = { sp: null, spec: new Array(40).fill(0), specAt: 0, specShown: new Array(40).fill(0), procs: [], exec: false, planned: false, info: null, wins: [], compact: 0, state: 'loading', followup: false, level: 0, target: 0, prom: 0, hold: 0,
             color: [...COLORS.loading], t: 0, pin: loadPin(), timers: [] };
 let pttActive = false;
 const eff = () => (pttActive && (S.state === 'idle' || S.state === 'speaking') ? 'listening' : S.state);
@@ -118,7 +118,8 @@ function handle(m) {
     case 'error': addLog('ERROR: ' + m.text); break;
     case 'desktop': S.wins = m.windows || []; updateCovered(); break;
     case 'launcher': buildTiles(m.items || []); break;
-    case 'config': S.idle = m.idle_position === 'corner' ? 'corner' : 'center'; break;
+    case 'spotify': S.sp = { ...m, at: Date.now() }; updatePlayer(true); break;
+    case 'spectrum': S.spec = m.bands || S.spec; S.specAt = Date.now(); break;
     case 'info': showInfo(m); break;
     case 'stats': onStats(m); break;
   }
@@ -211,8 +212,64 @@ const NBARS = 72;
 const bars = new Array(NBARS).fill(0);
 const rgba = (c, a) => `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
 const brain = new BrainViz.Brain(7);
+const hero = new HeroViz.Hero(21);
+let brainAct = 0;
 const orbNow = { x: 0, y: 0, R: 40 };
 let frameNo = 0, lastFollow = null;
+
+function heroPhase() { return phase() || (S.state === 'loading' ? 'loading' : S.state === 'error' ? 'error' : 'idle'); }
+
+function drawEdgeDim(big) {   // soft shading at the screen edges so free-floating text stays readable on any wallpaper
+  const a = 0.34 * big;
+  let g = ctx.createLinearGradient(0, 0, 400, 0); g.addColorStop(0, `rgba(0,6,14,${a})`); g.addColorStop(1, 'rgba(0,6,14,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 400, H);
+  g = ctx.createLinearGradient(W, 0, W - 400, 0); g.addColorStop(0, `rgba(0,6,14,${a})`); g.addColorStop(1, 'rgba(0,6,14,0)');
+  ctx.fillStyle = g; ctx.fillRect(W - 400, 0, 400, H);
+  g = ctx.createLinearGradient(0, H, 0, H - 300); g.addColorStop(0, `rgba(0,6,14,${a * 0.9})`); g.addColorStop(1, 'rgba(0,6,14,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, H - 300, W, 300);
+}
+
+// the audio spectrum: real (from the backend's loopback capture) or simulated while a song is playing
+function updateSpectrum(t) {
+  const live = Date.now() - S.specAt < 2500, playing = !!(S.sp && S.sp.playing);
+  const beat = Math.pow(Math.max(0, Math.sin(t * 3.9)), 3);
+  for (let i = 0; i < 40; i++) {
+    let want;
+    if (live) want = (S.spec[i] || 0) / 100;
+    else if (playing) want = 0.55 * Math.exp(-i / 24) * (0.3 + 0.7 * Math.abs(Math.sin(t * (1.6 + i * 0.17) + i * 1.3))) * (0.55 + 0.6 * beat);
+    else want = 0.02;
+    S.specShown[i] += (want - S.specShown[i]) * (want > S.specShown[i] ? 0.5 : 0.18);
+  }
+}
+
+// ---------- spotify player ----------
+const fmtT = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+const PLAY = 'M8 5v14l11-7z', PAUSE = 'M7 5h4v14H7zM13 5h4v14h-4z';
+let lastArt = null;
+function updatePlayer(full) {
+  const sp = S.sp, box = $('player');
+  if (!sp) return;
+  box.classList.toggle('off', !sp.ok);
+  if (full || sp.ok === false) {
+    if (!sp.ok) { $('pl-label').textContent = 'SPOTIFY · NOT LINKED'; $('pl-title').textContent = 'Spotify is not connected'; $('pl-artist').textContent = 'Run spotify-login.bat once to link it'; }
+    else if (!sp.title) { $('pl-label').textContent = 'SPOTIFY · IDLE'; $('pl-title').textContent = 'Nothing playing'; $('pl-artist').textContent = 'Say “Jarvis, play something”'; }
+    else { $('pl-label').textContent = sp.playing ? 'SPOTIFY · NOW PLAYING' : 'SPOTIFY · PAUSED'; $('pl-title').textContent = sp.title; $('pl-artist').textContent = sp.artist + (sp.album ? ' — ' + sp.album : ''); }
+    if (sp.art !== lastArt) { lastArt = sp.art; const im = $('pl-img'); if (sp.art) { im.style.visibility = 'visible'; im.src = sp.art; } else { im.style.visibility = 'hidden'; } }
+  }
+  $('pl-art').classList.toggle('playing', !!sp.playing);
+  $('pl-pp').innerHTML = '<path d="' + (sp.playing ? PAUSE : PLAY) + '"/>';
+  const dur = sp.duration_ms || 0, prog = Math.min(dur, (sp.progress_ms || 0) + (sp.playing ? Date.now() - sp.at : 0));
+  $('pl-fill').style.width = dur ? (prog / dur) * 100 + '%' : '0%';
+  $('pl-t0').textContent = fmtT(prog); $('pl-t1').textContent = fmtT(dur);
+}
+setInterval(() => updatePlayer(false), 250);
+document.addEventListener('click', (e) => {
+  const b = e.target.closest && e.target.closest('.pbtn');
+  if (!b) return;
+  const a = b.dataset.a;
+  if (a === 'play_pause' && S.sp) { S.sp.progress_ms = (S.sp.progress_ms || 0) + (S.sp.playing ? Date.now() - S.sp.at : 0); S.sp.at = Date.now(); S.sp.playing = !S.sp.playing; updatePlayer(true); }
+  send({ type: 'spotify', action: a });
+});
 
 function placeFollowers(cx, cy, R) {
   const f = Layout.followers(cx, cy, R, W, H);
@@ -231,6 +288,7 @@ function frame(ms) {
 
   // ease colour + prominence + audio level
   const st = eff();
+  updateSpectrum(t);
   const tc = COLORS[st] || COLORS.idle;
   for (let i = 0; i < 3; i++) S.color[i] += (tc[i] - S.color[i]) * 0.08;
   document.documentElement.style.setProperty('--c', S.color.map(Math.round).join(','));
@@ -248,7 +306,7 @@ function frame(ms) {
   const wantC = Layout.isCompact(S.wins) ? 1 : 0;
   S.compact += (wantC - S.compact) * 0.07;
   const cm = S.compact * S.compact * (3 - 2 * S.compact);
-  const { x: cx, y: cy, R } = Layout.orb(W, H, cm, k, S.pin, S.idle);
+  const { x: cx, y: cy, R } = Layout.orb(W, H, cm, k, S.pin);
   orbNow.x = cx; orbNow.y = cy; orbNow.R = R;
   const speed = st === 'thinking' ? 3.2 : st === 'listening' ? 1.2 : 0.55;
 
@@ -261,14 +319,21 @@ function frame(ms) {
   document.body.classList.toggle('pinned', !!S.pin);
   if (follow) placeFollowers(cx, cy, R);
 
-  const alpha = 0.45 + 0.55 * Math.max(k * (1 - cm), cm * 0.55, S.pin ? 0.6 : 0, st === 'loading' ? 0.6 : 0, S.idle === 'center' ? 0.7 * (1 - cm) : 0);
+  const alpha = 0.55 + 0.45 * Math.max(k * (1 - cm), cm * 0.4, S.pin ? 0.6 : 0, st === 'loading' ? 0.6 : 0);
   const big = 1 - cm;   // how "full size" the HUD is (radar, waveform)
 
-  const scenic = big > 0.05 && !S.pin;          // full command-center scenery only on a clear desktop
-  const sa = Math.min(1, alpha + 0.2) * big;
-  if (scenic) {
+  // ---- the main stage (clear desktop only): background, hero brain, hologram platform ----
+  if (big > 0.03) {
     Scenery.drawBackground(ctx, t, dt, c, big);
-    Scenery.drawPlatform(ctx, cx, cy, R, t, c, sa, lv);
+    drawEdgeDim(big);
+    const hR = Math.min(W * 0.17, H * 0.27), hx = W / 2, hy = H * 0.42;
+    const ha = Math.min(1, 0.75 + 0.25 * brainAct) * big;
+    const rp = hR * 0.34;                                           // platform sits just under the stem
+    Scenery.drawPlatform(ctx, hx, hy + hR * 1.02 + 44 - rp * 2.95, rp, t, c, ha, lv);
+    const bass = (S.specShown[0] + S.specShown[1] + S.specShown[2] + S.specShown[3] + S.specShown[4]) / 5;
+    hero.update(dt, heroPhase(), lv, S.sp && S.sp.playing ? bass : 0);
+    hero.draw(ctx, hx, hy, hR, t, c, ha, W >= 1500);
+    Scenery.drawOrbits(ctx, hx, hy, hR * 0.42, t, c, ha * 0.9);
   }
 
   // glow
@@ -294,8 +359,7 @@ function frame(ms) {
 
   // arc-reactor rings
   ctx.lineWidth = 2;
-  const showGlobe = R > 38;
-  const rings = showGlobe ? [[R * 1.25, 3, 0.7, 1]] : [[R * 1.25, 3, 0.7, 1], [R * 1.05, 5, 0.55, -1.4], [R * 0.9, 2, 0.8, 2.1]];
+  const rings = [[R * 1.25, 3, 0.7, 1], [R * 1.05, 5, 0.55, -1.4], [R * 0.9, 2, 0.8, 2.1]];
   for (const [rr, segs, frac, dir] of rings) {
     const base = t * speed * dir;
     for (let s = 0; s < segs; s++) {
@@ -327,15 +391,7 @@ function frame(ms) {
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, R * 0.85, 0, 7); ctx.fill();
   brain.update(dt, st, lv);
   brain.draw(ctx, cx, cy, R, t, c, Math.min(1, alpha + 0.25));
-  if (showGlobe) Scenery.drawGlobe(ctx, cx, cy, R * 1.0, t, c, Math.min(1, alpha + 0.2), lv);
-  if (scenic) {
-    Scenery.drawOrbits(ctx, cx, cy, R, t, c, sa);
-    if (W >= 1700) {
-      const inf = S.info || {};
-      Scenery.drawCallouts(ctx, cx, cy, R, t, c, sa * (0.5 + 0.5 * k), [['Neural net', 'Online'], ['Voice', inf.voice || '--'], ['Brain', inf.provider || '--'], ['Link', 'Secure']]);
-    }
-  }
-  if (frameNo % 15 === 0) { $('i-syn').textContent = brain.firing; }
+  if (frameNo % 15 === 0) { $('i-syn').textContent = hero.firing; }
 
   // thinking: orbiting dots
   if (st === 'thinking') {
@@ -349,9 +405,10 @@ function frame(ms) {
   if (frameNo % 3 === 0) { Perf.draw($('perfc'), c); }
   if (frameNo % 2 === 0) {
     Scenery.drawRadar($('radarc'), S.procs, t, c);
-    if (big > 0.2 && !S.pin) {
-      Scenery.drawEmblem($('emblem'), t, c, k); Scenery.drawWave($('wave'), waveArr, c, st !== 'idle', t);
-      setBars('r-syn', brain.firing / 70, 0.9);
+    if (big > 0.2) {
+      Scenery.drawWave($('wave'), waveArr, c, st !== 'idle', t);
+      setBars('r-syn', hero.firing / 90, 0.9);
+      Scenery.drawSpectrum($('pl-spec'), S.specShown, c, t);
     }
   }
   if (frameNo % 6 === 0) updatePhases();

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy"
-      content="default-src 'self'; connect-src ws://127.0.0.1:8765; style-src 'self' 'unsafe-inline'">
+      content="default-src 'self'; connect-src ws://127.0.0.1:8765; img-src 'self' https://i.scdn.co data:; style-src 'self' 'unsafe-inline'">
 <title>Jarvis</title>
 <style>
   :root { --c: 0, 200, 255; }
@@ -13,15 +13,16 @@
   #hud.hidden { opacity: 0; }
   canvas#c { position: fixed; inset: 0; pointer-events: none; }
 
-  /* ---- panels: dark glass with corner brackets ---- */
+  /* ---- panels: free-form text floating on the desktop (no boxes). Plates return when a window is open. ---- */
   .panel { position: fixed; color: rgb(var(--c)); font-family: Consolas, monospace; font-size: 11px;
-           letter-spacing: .12em; text-transform: uppercase; transition: opacity .6s;
-           background: linear-gradient(180deg, rgba(4, 16, 28, .62), rgba(3, 10, 20, .46));
-           border: 1px solid rgba(var(--c), .22); padding: 10px 14px; box-sizing: border-box;
-           text-shadow: 0 0 8px rgba(var(--c), .5); backdrop-filter: blur(5px); }
-  .panel::before, .panel::after { content: ""; position: absolute; width: 10px; height: 10px; pointer-events: none; }
+           letter-spacing: .12em; text-transform: uppercase; transition: opacity .6s; box-sizing: border-box; padding: 4px 6px;
+           text-shadow: 0 0 5px rgba(0, 6, 14, .95), 0 0 12px rgba(0, 6, 14, .8), 0 0 9px rgba(var(--c), .45); }
+  .panel::before, .panel::after { content: ""; position: absolute; width: 10px; height: 10px; pointer-events: none; display: none; }
   .panel::before { top: -1px; left: -1px; border-top: 2px solid rgb(var(--c)); border-left: 2px solid rgb(var(--c)); }
   .panel::after { bottom: -1px; right: -1px; border-bottom: 2px solid rgb(var(--c)); border-right: 2px solid rgb(var(--c)); }
+  body.compact .panel { padding: 10px 14px; background: linear-gradient(180deg, rgba(4, 16, 28, .72), rgba(3, 10, 20, .6));
+                        border: 1px solid rgba(var(--c), .25); backdrop-filter: blur(5px); }
+  body.compact .panel::before, body.compact .panel::after { display: block; }
   .ph { font-size: 10px; letter-spacing: .28em; opacity: .75; margin: -2px 0 8px; display: flex; align-items: center; gap: 8px; }
   .ph::before { content: ""; width: 6px; height: 6px; background: rgb(var(--c)); box-shadow: 0 0 8px rgb(var(--c)); }
   .ph::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(var(--c), .5), transparent); }
@@ -29,10 +30,10 @@
   .panel.covered, .dim .panel.covered { opacity: 0 !important; pointer-events: none; }   /* a window is on top of it: tuck it away */
 
   /* left column: system diagnostics */
-  #diag { top: 28px; left: 28px; width: 300px; padding: 12px 14px 10px; }
+  #diag { top: 28px; left: 28px; width: 300px; }
   #diag h1 { margin: 0; font: 400 20px Consolas, monospace; letter-spacing: .3em; color: #dff9ff; text-shadow: 0 0 12px rgb(var(--c)); }
   #diag h2 { margin: 2px 0 10px; font: 400 10px Consolas, monospace; letter-spacing: .3em; color: rgb(var(--c)); opacity: .85; }
-  .drow { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; padding: 5px 0; border-top: 1px solid rgba(var(--c), .1); }
+  .drow { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; padding: 5px 0; border-top: 1px solid transparent; border-image: linear-gradient(90deg, rgba(var(--c), .35), transparent) 1; }
   .di { width: 30px; height: 30px; box-sizing: border-box; padding: 5px; border: 1px solid rgba(var(--c), .5); border-radius: 8px;
         background: rgba(var(--c), .08); box-shadow: inset 0 0 10px rgba(var(--c), .15); }
   .di svg { width: 100%; height: 100%; fill: none; stroke: rgb(var(--c)); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
@@ -105,24 +106,46 @@
   .seg .bars i { width: 4px; height: 10px; background: rgba(var(--c), .15); }
   .seg .bars i.on { background: rgb(var(--c)); box-shadow: 0 0 6px rgb(var(--c)); }
   .seg .bars i.hot { background: #ff7a5a; box-shadow: 0 0 6px #ff7a5a; }
-  body.compact #rail, body.pinned #rail { opacity: 0; }
+  body.compact #rail { opacity: 0; }
 
-  /* bottom status bar */
-  #bar { bottom: 54px; left: 50%; transform: translateX(-50%); width: min(800px, calc(100vw - 720px)); min-width: 560px; height: 152px; padding: 10px 18px 8px;
-         display: grid; grid-template-columns: 92px 1fr 150px; grid-template-rows: 1fr auto; gap: 0 16px; pointer-events: none;
-         clip-path: polygon(18px 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%, 0 18px); }
-  #emblem { width: 88px; height: 88px; align-self: center; }
-  #barmid { text-align: center; align-self: center; min-width: 0; }
-  #bartitle { font-size: 15px; letter-spacing: .32em; color: #dff9ff; text-shadow: 0 0 12px rgb(var(--c)); }
-  #barstate { font-size: 11px; letter-spacing: .3em; margin: 3px 0 4px; }
-  #wave { display: block; width: 100%; height: 40px; }
-  #phases { align-self: center; display: flex; flex-direction: column; gap: 2px; }
-  .phs { display: flex; align-items: center; gap: 9px; padding: 3px 8px; font-size: 10px; letter-spacing: .14em; opacity: .5; border: 1px solid transparent; border-radius: 14px; transition: all .25s; }
-  .phs i { width: 9px; height: 9px; border: 1.5px solid rgb(var(--c)); border-radius: 50%; }
-  .phs.on { opacity: 1; border-color: rgba(var(--c), .8); background: rgba(var(--c), .16); box-shadow: 0 0 12px rgba(var(--c), .4); }
+  /* status group, left of the core in the bottom-right corner */
+  #bar { bottom: 52px; right: 320px; width: 280px; text-align: right; pointer-events: none; }
+  #bartitle { font-size: 14px; letter-spacing: .3em; color: #dff9ff; text-shadow: 0 0 12px rgb(var(--c)), 0 0 6px #000; }
+  #barstate { font-size: 11px; letter-spacing: .3em; margin: 3px 0 6px; }
+  #wave { display: block; width: 100%; height: 34px; }
+  #phases { margin-top: 8px; display: flex; flex-direction: column; gap: 2px; align-items: flex-end; }
+  .phs { display: flex; align-items: center; gap: 9px; padding: 2px 10px; font-size: 10px; letter-spacing: .14em; opacity: .5; border: 1px solid transparent; border-radius: 14px; transition: all .25s; }
+  .phs i { order: 2; width: 9px; height: 9px; border: 1.5px solid rgb(var(--c)); border-radius: 50%; }
+  .phs.on { opacity: 1; border-color: rgba(var(--c), .8); background: rgba(var(--c), .14); box-shadow: 0 0 12px rgba(var(--c), .4); }
   .phs.on i { background: rgb(var(--c)); box-shadow: 0 0 8px rgb(var(--c)); }
-  #barhint { grid-column: 1 / -1; text-align: center; font-size: 9px; letter-spacing: .12em; opacity: .65; text-transform: none; padding-top: 2px; }
-  body.compact #bar, body.pinned #bar { opacity: 0 !important; }
+  body.compact #bar, body.compact #player { opacity: 0 !important; pointer-events: none !important; }
+
+  /* spotify player with live audio visualiser (clear desktop only) */
+  #player { bottom: 36px; left: 50%; transform: translateX(-50%); width: 640px; }
+  #pl-top { display: grid; grid-template-columns: 84px 1fr auto; gap: 16px; align-items: center; }
+  #pl-art { position: relative; width: 84px; height: 84px; }
+  #pl-art img { position: absolute; inset: 7px; width: 70px; height: 70px; border-radius: 50%; object-fit: cover; background: #06121e; }
+  #pl-art .ring { position: absolute; inset: 0; border-radius: 50%; border: 2px solid transparent;
+                  background: conic-gradient(from var(--ang), rgba(var(--c), 1), rgba(var(--c), .05) 35%, rgba(var(--c), 1)) border-box;
+                  -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+  #pl-art.playing .ring { animation: spin 3s linear infinite; }
+  #pl-art .hole { position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px; border-radius: 50%; background: rgba(4, 12, 22, .9); border: 1px solid rgba(var(--c), .7); }
+  #pl-label { font-size: 9px; letter-spacing: .3em; opacity: .75; }
+  #pl-title { font-size: 18px; letter-spacing: .06em; color: #f0fdff; text-transform: none; margin: 3px 0 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 380px; }
+  #pl-artist { font-size: 12px; letter-spacing: .08em; text-transform: none; opacity: .9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 380px; }
+  #pl-ctl { display: flex; align-items: center; gap: 10px; }
+  .pbtn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(var(--c), .6); display: flex; align-items: center; justify-content: center; cursor: pointer;
+          background: rgba(var(--c), .08); transition: background .15s, transform .1s, box-shadow .15s; }
+  .pbtn.big { width: 44px; height: 44px; border-width: 1.5px; }
+  .pbtn svg { width: 55%; height: 55%; fill: rgb(var(--c)); }
+  .pbtn:hover { background: rgba(var(--c), .3); box-shadow: 0 0 14px rgba(var(--c), .7); }
+  .pbtn:active { transform: scale(.9); }
+  #pl-prog { display: flex; align-items: center; gap: 10px; margin: 8px 0 2px; font-size: 10px; opacity: .85; }
+  #pl-bar { flex: 1; height: 3px; background: rgba(var(--c), .2); position: relative; }
+  #pl-bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: rgb(var(--c)); box-shadow: 0 0 8px rgb(var(--c)); }
+  #pl-bar i::after { content: ""; position: absolute; right: -3px; top: -3px; width: 9px; height: 9px; border-radius: 50%; background: #fff; box-shadow: 0 0 8px rgb(var(--c)); }
+  #pl-spec { display: block; width: 100%; height: 74px; margin-top: 2px; }
+  #player.off #pl-ctl { opacity: .3; pointer-events: none; }
 
   /* screen-corner frame (only with a clear desktop) */
   .frame { position: fixed; width: 46px; height: 46px; pointer-events: none; transition: opacity .6s; opacity: .55; }
@@ -130,10 +153,10 @@
   .frame.tr { top: 8px; right: 8px; border-top: 2px solid rgb(var(--c)); border-right: 2px solid rgb(var(--c)); }
   .frame.bl { bottom: 8px; left: 8px; border-bottom: 2px solid rgb(var(--c)); border-left: 2px solid rgb(var(--c)); }
   .frame.br { bottom: 8px; right: 8px; border-bottom: 2px solid rgb(var(--c)); border-right: 2px solid rgb(var(--c)); }
-  body.compact .frame, body.pinned .frame { opacity: 0; }
+  body.compact .frame { opacity: 0; }
 
   /* captions + labels */
-  #caption { position: fixed; left: 50%; bottom: 216px; transform: translateX(-50%); width: 900px; max-width: 70vw;
+  #caption { position: fixed; left: 50%; bottom: 262px; transform: translateX(-50%); width: 900px; max-width: 70vw;
              text-align: center; transition: opacity .8s; opacity: 0; pointer-events: none; }
   #caption.show { opacity: 1; }
   #cap-user { color: rgba(var(--c), .65); font-size: 16px; margin-bottom: 8px; font-style: italic; }
@@ -189,8 +212,8 @@
   </div>
 
   <div id="bar" class="panel">
-    <canvas id="emblem"></canvas>
-    <div id="barmid"><div id="bartitle">J.A.R.V.I.S. AI CORE</div><div id="barstate">STANDING BY</div><canvas id="wave"></canvas></div>
+    <div id="bartitle">J.A.R.V.I.S. AI CORE</div><div id="barstate">STANDING BY</div>
+    <canvas id="wave"></canvas>
     <div id="phases">
       <div class="phs" data-p="listening"><i></i>LISTENING</div>
       <div class="phs" data-p="thinking"><i></i>THINKING</div>
@@ -198,7 +221,24 @@
       <div class="phs" data-p="executing"><i></i>EXECUTING</div>
       <div class="phs" data-p="responding"><i></i>RESPONDING</div>
     </div>
-    <div id="barhint">Say "Hey Jarvis" · hold the orb to talk · or press Ctrl+Alt+J</div>
+  </div>
+
+  <div id="player" class="panel">
+    <div id="pl-top">
+      <div id="pl-art"><img id="pl-img" alt=""><div class="ring"></div><div class="hole"></div></div>
+      <div>
+        <div id="pl-label">SPOTIFY · NOW PLAYING</div>
+        <div id="pl-title">Nothing playing</div>
+        <div id="pl-artist">Say “play something” or open Spotify</div>
+      </div>
+      <div id="pl-ctl">
+        <div class="pbtn interactive" data-a="previous" title="Previous"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></div>
+        <div class="pbtn big interactive" data-a="play_pause" title="Play / pause"><svg viewBox="0 0 24 24" id="pl-pp"><path d="M8 5v14l11-7z"/></svg></div>
+        <div class="pbtn interactive" data-a="next" title="Next"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></div>
+      </div>
+    </div>
+    <div id="pl-prog"><span id="pl-t0">0:00</span><div id="pl-bar"><i id="pl-fill"></i></div><span id="pl-t1">0:00</span></div>
+    <canvas id="pl-spec"></canvas>
   </div>
 
   <div id="corner"><span id="cstate"></span><span id="hint">HOLD: TALK · RIGHT-DRAG: MOVE</span></div>
@@ -206,6 +246,7 @@
 </div>
 <script src="layout.js"></script>
 <script src="brain.js"></script>
+<script src="hero.js"></script>
 <script src="perf.js"></script>
 <script src="scenery.js"></script>
 <script src="renderer.js"></script>

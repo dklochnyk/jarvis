@@ -32,7 +32,7 @@ class Hub:
     def emit(self, **ev):
         if ev.get("type") == "state":
             self.state = ev
-        if ev.get("type") in ("desktop", "launcher", "info", "config"):
+        if ev.get("type") in ("desktop", "launcher", "info", "config", "spotify"):
             self.sticky[ev["type"]] = ev
         if ev.get("type") in ("log", "error"):
             print(f"[{ev['type']}] {ev['text']}", flush=True)
@@ -157,7 +157,9 @@ def main():
     from launcher import Launcher
 
     hub.emit(type="launcher", items=Launcher(cfg).public())
-    hub.emit(type="config", idle_position=(cfg.get("hud") or {}).get("idle_position", "center"))
+    from audiotap import SpectrumTap
+
+    SpectrumTap(hub.emit).start()
     if args.demo:
         threading.Thread(target=demo_loop, args=(hub,), daemon=True).start()
     else:

@@ -10,6 +10,7 @@ import traceback
 import voice
 from brain import Brain
 from launcher import Launcher
+from spotify_feed import SpotifyFeed
 from tools import Tools
 
 
@@ -25,6 +26,7 @@ class Jarvis:
         self.ptt_down_at = 0.0
         self.launcher = Launcher(cfg)
         self.tools = None
+        self.spotify_feed = None
         self.followup_until = 0.0
         self.announcements = queue.Queue()      # timers / reminders waiting to be spoken
         self.preroll = collections.deque(maxlen=6)  # last ~0.5 s of audio, so the first word isn't clipped
@@ -44,6 +46,9 @@ class Jarvis:
             self.commands.put({"type": "ptt"})
         elif t == "ptt_up":
             self.ptt_held.clear()
+        elif t == "spotify":
+            if self.spotify_feed:
+                threading.Thread(target=self.spotify_feed.act, args=(cmd.get("action"),), daemon=True).start()
         elif t == "launch":
             threading.Thread(target=self._launch, args=(cmd.get("index"),), daemon=True).start()
         elif t in ("hotkey", "text"):
@@ -92,6 +97,8 @@ class Jarvis:
         else:
             self.brain = Brain(self.cfg, tools, self.emit)
             self.emit(type="log", text=f"Brain: Claude ({self.cfg.get('model')})")
+        self.spotify_feed = SpotifyFeed(self.tools.spotify, self.emit)
+        self.spotify_feed.start()
         self.vad = float(self.cfg.get("vad_threshold", 0.012))
         self.silence = float(self.cfg.get("silence_seconds", 1.1))
         self.max_rec = float(self.cfg.get("max_record_seconds", 20))

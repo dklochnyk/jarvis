@@ -177,6 +177,29 @@ class SpotifyCtl:
             return f"Saved {current['item']['name']} to your Liked Songs."
         return "Unknown Spotify action."
 
+    def snapshot(self):
+        """Now-playing info for the HUD (not a voice tool). Raises SpotifyError if Spotify isn't set up."""
+        sp = self._client()
+        cur = self._call(sp.current_playback)
+        item = (cur or {}).get("item")
+        if not item:
+            return {"ok": True, "playing": False}
+        imgs = (item.get("album") or {}).get("images") or item.get("images") or []
+        art = (imgs[1] if len(imgs) > 1 else imgs[0])["url"] if imgs else None
+        artists = ", ".join(a["name"] for a in item.get("artists", [])[:2]) or (item.get("show") or {}).get("name", "")
+        return {
+            "ok": True,
+            "playing": bool(cur.get("is_playing")),
+            "title": item.get("name", ""),
+            "artist": artists,
+            "album": (item.get("album") or {}).get("name", ""),
+            "art": art,
+            "progress_ms": cur.get("progress_ms") or 0,
+            "duration_ms": item.get("duration_ms") or 0,
+            "volume": (cur.get("device") or {}).get("volume_percent"),
+            "shuffle": bool(cur.get("shuffle_state")),
+        }
+
     @tool
     def spotify_now_playing(self) -> str:
         """Say what song is currently playing on Spotify."""
