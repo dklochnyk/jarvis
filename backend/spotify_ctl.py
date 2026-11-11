@@ -17,6 +17,9 @@ DEFAULT_REDIRECT = "http://127.0.0.1:8888/callback"
 LIKED = ("liked songs", "my liked songs", "saved songs", "my saved songs", "favorites", "my favorites", "favourite songs")
 
 
+RESTRICTED = "Spotify won't allow that right now."
+
+
 class SpotifyError(Exception):
     pass
 
@@ -65,6 +68,8 @@ class SpotifyCtl:
             status, text = e.http_status, str(e).lower()
             if status == 403 and "premium" in text:
                 raise SpotifyError("That needs Spotify Premium.")
+            if status == 403 and "restriction" in text:
+                raise SpotifyError(RESTRICTED)
             if status == 404:
                 raise SpotifyError("There's no active Spotify player. Open Spotify and try again.")
             if status == 401:
@@ -148,11 +153,27 @@ class SpotifyCtl:
         sp = self._client()
         a = action.lower().strip().replace(" ", "_")
         if a in ("play", "resume"):
+            try:
+                cur = sp.current_playback()
+                if cur and cur.get("is_playing"):
+                    return "Already playing."
+            except Exception:
+                pass
             device = self._ensure_device(sp)
-            self._call(sp.start_playback, device_id=device["id"])
+            try:
+                self._call(sp.start_playback, device_id=device["id"])
+            except SpotifyError as e:
+                if str(e) != RESTRICTED:
+                    raise
+                return "Already playing."
             return "Resumed."
         if a == "pause":
-            self._call(sp.pause_playback)
+            try:
+                self._call(sp.pause_playback)
+            except SpotifyError as e:
+                if str(e) != RESTRICTED:
+                    raise
+                return "Already paused."
             return "Paused."
         if a in ("next", "skip"):
             self._call(sp.next_track)
