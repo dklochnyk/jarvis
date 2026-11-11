@@ -20,10 +20,26 @@ TEMPLATE = """# Your personal settings. Jarvis updates never touch this file.
 """
 
 
+WARNINGS = []  # problems found while reading settings; main.py prints them at startup
+
+
+class _Loader(yaml.SafeLoader):
+    """Same as the normal loader, but notices a setting written twice (YAML silently keeps the last one)."""
+
+    def construct_mapping(self, node, deep=False):
+        seen = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=True)
+            if key in seen:
+                WARNINGS.append(f"'{key}' appears more than once in a settings file - only the LAST one counts.")
+            seen.add(key)
+        return super().construct_mapping(node, deep)
+
+
 def _read(path):
     try:
         with open(path, encoding="utf-8") as f:
-            return yaml.safe_load(f) or {}
+            return yaml.load(f, Loader=_Loader) or {}
     except FileNotFoundError:
         return {}
 

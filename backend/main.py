@@ -118,8 +118,16 @@ def main():
     from config_loader import load_config
     from updater import read_version
 
+    import config_loader
+
     cfg = load_config(ROOT)
     print(f"Jarvis version: {read_version(ROOT).get('short', 'local copy')}", flush=True)
+    print(f"Running from:  {ROOT}", flush=True)
+    print(f"Settings file: {os.path.join(ROOT, 'settings.yaml')}  ->  provider = {cfg.get('provider')}", flush=True)
+    if os.path.exists(os.path.join(ROOT, "config.yaml")):
+        print("NOTE: config.yaml is the OLD settings file and is ignored now. Edit settings.yaml instead.", flush=True)
+    for w in config_loader.WARNINGS:
+        print(f"WARNING: {w}", flush=True)
     provider = cfg.get("provider", "claude")
     # Use ONLY the keys from .env: ignore stray API-key variables set elsewhere in Windows
     for var in ("ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"):
