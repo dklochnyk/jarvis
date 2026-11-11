@@ -168,6 +168,28 @@ def record_utterance(mic, on_level, vad, silence_s, max_s, start_timeout=5.0, in
     return np.concatenate(frames)
 
 
+def record_held(mic, on_level, is_held, max_s, tail_s=0.3):
+    """Push-to-talk: record for as long as the button is held (plus a short tail). Returns int16 audio or None."""
+    frames, t0, released_at = [], time.time(), None
+    while True:
+        f = mic.get(0.1)
+        now = time.time()
+        if f is not None:
+            on_level(level(rms(f)))
+            frames.append(f)
+        if is_held():
+            released_at = None
+        elif released_at is None:
+            released_at = now
+        if released_at is not None and now - released_at >= tail_s:
+            break
+        if now - t0 > max_s:
+            break
+    if len(frames) < 4 or (released_at is not None and released_at - t0 < 0.35):
+        return None  # a quick tap, not speech
+    return np.concatenate(frames)
+
+
 # ------------------------------------------------------------ text to speech
 def _read_wav(path):
     with wave.open(path, "rb") as w:

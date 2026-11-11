@@ -14,6 +14,7 @@ function connect() {
 
 window.jarvis.onHotkey(() => send({ type: 'hotkey' }));
 window.jarvis.onToggleHud(() => $('hud').classList.toggle('hidden'));
+window.jarvis.onResetOrb && window.jarvis.onResetOrb(() => setPin(null));
 
 // ---------- state ----------
 const COLORS = {
@@ -26,14 +27,24 @@ const COLORS = {
 };
 const LABEL = { loading: 'Initialising', idle: 'Standing by', listening: 'Listening', thinking: 'Processing', speaking: 'Responding', error: 'Fault' };
 
-const S = { wins: [], compact: 0, state: 'loading', followup: false, level: 0, target: 0, prom: 0, color: [...COLORS.loading], t: 0 };
-
-function setState(st, followup = false) {
-  S.state = st; S.followup = followup;
-  const lbl = (LABEL[st] || st).toUpperCase() + (followup && st === 'idle' ? ' · LISTENING' : '');
-  $('state').textContent = lbl; $('cstate').textContent = lbl;
-  document.body.classList.toggle('dim', st === 'idle' && !followup);
+function loadPin() { try { return JSON.parse(localStorage.getItem('jarvis.orbpin')) || null; } catch (e) { return null; } }
+function setPin(p) {
+  S.pin = p;
+  try { p ? localStorage.setItem('jarvis.orbpin', JSON.stringify(p)) : localStorage.removeItem('jarvis.orbpin'); } catch (e) { /* storage unavailable: fine */ }
 }
+
+const S = { wins: [], compact: 0, state: 'loading', followup: false, level: 0, target: 0, prom: 0, hold: 0,
+            color: [...COLORS.loading], t: 0, pin: loadPin(), timers: [] };
+let pttActive = false;
+const eff = () => (pttActive && (S.state === 'idle' || S.state === 'speaking') ? 'listening' : S.state);
+
+function refreshLabel() {
+  const st = eff();
+  const lbl = (LABEL[st] || st).toUpperCase() + (S.followup && st === 'idle' ? ' · LISTENING' : '');
+  $('state').textContent = lbl; $('cstate').textContent = lbl;
+  document.body.classList.toggle('dim', st === 'idle' && !S.followup);
+}
+function setState(st, followup = false) { S.state = st; S.followup = followup; refreshLabel(); }
 
 let capTimer;
 function showCaption() { $('caption').classList.add('show'); clearTimeout(capTimer); }
@@ -46,6 +57,23 @@ function addLog(text) {
   log.appendChild(d);
   while (log.children.length > 5) log.removeChild(log.firstChild);
   setTimeout(() => d.remove(), 15000);
+}
+
+function buildTiles(items) {
+  const box = $('tiles');
+  box.replaceChildren();
+  if (!items.length) {
+    const d = document.createElement('div'); d.className = 'empty';
+    d.textContent = 'Add launcher: items in settings.yaml'; box.appendChild(d); return;
+  }
+  items.forEach((it, i) => {
+    const t = document.createElement('div'); t.className = 'tile interactive'; t.title = it.name;
+    const ic = document.createElement('div'); ic.className = 'ic'; ic.textContent = it.icon;
+    const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = it.name;
+    t.append(ic, nm);
+    t.addEventListener('click', () => { addLog('Launching ' + it.name); send({ type: 'launch', index: i }); });
+    box.appendChild(t);
+  });
 }
 
 function handle(m) {
@@ -61,21 +89,23 @@ function handle(m) {
       else if (m.role === 'user') { $('cap-user').textContent = '“' + m.text + '”'; $('cap-ai').textContent = ''; }
       else { $('cap-ai').textContent += (($('cap-ai').textContent ? ' ' : '') + m.text); }
       break;
-    case 'desktop': S.wins = m.windows || []; updateCovered(); break;
     case 'tool': addLog('Executing ' + m.name + (m.input && m.input.name ? ': ' + m.input.name : '')); break;
     case 'tool_result': addLog(m.result); break;
     case 'log': addLog(m.text); break;
     case 'timers': S.timers = m.items || []; drawTimers(); break;
     case 'error': addLog('ERROR: ' + m.text); break;
-    case 'stats':
-      $('cpuv').textContent = Math.round(m.cpu) + '%'; $('cpub').style.width = m.cpu + '%';
-      $('memv').textContent = Math.round(m.mem) + '%'; $('memb').style.width = m.mem + '%';
+    case 'desktop': S.wins = m.windows || []; updateCovered(); break;
+    case 'launcher': buildTiles(m.items || []); break;
+    case 'info':
+      $('i-brain').textContent = ((m.provider || '') + (m.model ? ' · ' + String(m.model).replace(/^models\//, '') : '')).toUpperCase().slice(0, 30);
+      $('i-voice').textContent = (m.voice || '--').toUpperCase();
       break;
+    case 'stats': Perf.update(m); Perf.text({ procs: $('procs'), up: $('up'), bat: $('bat') }); break;
   }
 }
 
 // ---------- window awareness ----------
-const PANELS = ['status', 'log', 'timers', 'clockbox', 'stats'];
+const PANELS = ['status', 'core', 'log', 'timers', 'dock', 'clockbox', 'perf'];
 function updateCovered() {
   document.body.classList.toggle('compact', Layout.isCompact(S.wins));
   for (const id of PANELS) {
@@ -88,7 +118,6 @@ setInterval(updateCovered, 400);   // panels resize as logs/timers come and go
 addEventListener('resize', updateCovered);
 
 // ---------- timers panel ----------
-S.timers = [];
 function fmt(ms) {
   const s = Math.max(0, Math.round(ms / 1000)), h = Math.floor(s / 3600), mi = Math.floor((s % 3600) / 60), se = s % 60;
   return (h ? h + ':' + String(mi).padStart(2, '0') : mi) + ':' + String(se).padStart(2, '0');
@@ -110,10 +139,29 @@ function tick() {
   const d = new Date();
   $('time').textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   $('date').textContent = d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+  $('secfill').style.width = ((d.getSeconds() + d.getMilliseconds() / 1000) / 60 * 100) + '%';
 }
-setInterval(tick, 1000); tick();
+setInterval(tick, 250); tick();
 
-// ---------- canvas: orb + audio visuals ----------
+// ---------- neural activity trace ----------
+const eeg = [];
+setInterval(() => { eeg.push(S.level); while (eeg.length > 120) eeg.shift(); }, 50);
+function drawEeg(c) {
+  const cv = $('eeg'), g = cv.getContext('2d'), w = cv.width, h = cv.height;
+  g.clearRect(0, 0, w, h);
+  g.strokeStyle = `rgba(${c.map(Math.round).join(',')},.18)`; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(0, h / 2); g.lineTo(w, h / 2); g.stroke();
+  g.strokeStyle = `rgba(${c.map(Math.round).join(',')},.95)`; g.lineWidth = 1.4; g.beginPath();
+  const busy = S.state !== 'idle' && S.state !== 'loading';
+  eeg.forEach((v, i) => {
+    const x = (i / 119) * w, a = (busy ? 0.15 : 0.05) + v * 0.85;
+    const y = h / 2 + Math.sin(i * 1.3 + S.t * 9) * Math.cos(i * 0.37) * a * (h / 2 - 3);
+    i ? g.lineTo(x, y) : g.moveTo(x, y);
+  });
+  g.stroke();
+}
+
+// ---------- canvas: orb + digital brain + audio visuals ----------
 const cv = $('c'), ctx = cv.getContext('2d');
 let W, H;
 function resize() {
@@ -128,44 +176,87 @@ const NBARS = 72;
 const bars = new Array(NBARS).fill(0);
 const lin = new Array(56).fill(0);
 const rgba = (c, a) => `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
+const brain = new BrainViz.Brain(7);
+const orbNow = { x: 0, y: 0, R: 40 };
+let frameNo = 0, lastFollow = null;
+
+function placeFollowers(cx, cy, R) {
+  const f = Layout.followers(cx, cy, R, W, H);
+  const cap = $('caption').style, lab = $('corner').style;
+  cap.left = f.caption.left + 'px';
+  cap.top = f.caption.top != null ? f.caption.top + 'px' : 'auto';
+  cap.bottom = f.caption.bottom != null ? f.caption.bottom + 'px' : 'auto';
+  lab.left = f.label.x + 'px'; lab.top = f.label.y + 'px';
+  lab.transform = f.label.onLeft ? 'translate(-100%,-50%)' : 'translate(0,-50%)';
+  lab.textAlign = f.label.onLeft ? 'right' : 'left';
+}
 
 function frame(ms) {
-  const t = ms / 1000, dt = Math.min(0.05, t - S.t); S.t = t;
+  const t = ms / 1000, dt = Math.min(0.05, t - S.t); S.t = t; frameNo++;
   ctx.clearRect(0, 0, W, H);
 
   // ease colour + prominence + audio level
-  const tc = COLORS[S.state] || COLORS.idle;
+  const st = eff();
+  const tc = COLORS[st] || COLORS.idle;
   for (let i = 0; i < 3; i++) S.color[i] += (tc[i] - S.color[i]) * 0.08;
   document.documentElement.style.setProperty('--c', S.color.map(Math.round).join(','));
-  const active = (S.state === 'idle' && !S.followup) || S.state === 'loading' ? 0 : 1;
+  const active = (st === 'idle' && !S.followup) || st === 'loading' ? 0 : 1;
   S.prom += (active - S.prom) * 0.06;
+  S.hold += ((pttActive ? 1 : 0) - S.hold) * 0.15;
   S.target *= 0.9;
   S.level += (S.target - S.level) * 0.35;
   const lv = S.level;
   const c = S.color;
 
   // No windows: orb sits bottom-right when idle and grows toward the screen centre when active.
-  // Window open: it stays small in the bottom-right corner.
+  // Window open: it stays small in the bottom-right corner. A dragged position overrides both.
   const k = S.prom * S.prom * (3 - 2 * S.prom);
   const wantC = Layout.isCompact(S.wins) ? 1 : 0;
   S.compact += (wantC - S.compact) * 0.07;
   const cm = S.compact * S.compact * (3 - 2 * S.compact);
-  const { x: cx, y: cy, R } = Layout.orb(W, H, cm, k);
-  const speed = S.state === 'thinking' ? 3.2 : S.state === 'listening' ? 1.2 : 0.55;
+  const { x: cx, y: cy, R } = Layout.orb(W, H, cm, k, S.pin);
+  orbNow.x = cx; orbNow.y = cy; orbNow.R = R;
+  const speed = st === 'thinking' ? 3.2 : st === 'listening' ? 1.2 : 0.55;
 
-  const alpha = 0.45 + 0.55 * Math.max(k * (1 - cm), cm * 0.55, S.state === 'loading' ? 0.6 : 0);
+  const follow = Layout.isCompact(S.wins) || !!S.pin;
+  if (follow !== lastFollow) {
+    lastFollow = follow;
+    document.body.classList.toggle('follow', follow);
+    if (!follow) for (const el of [$('caption'), $('corner')]) { el.style.left = el.style.top = el.style.bottom = el.style.transform = el.style.textAlign = ''; }
+  }
+  document.body.classList.toggle('pinned', !!S.pin);
+  if (follow) placeFollowers(cx, cy, R);
+
+  const alpha = 0.45 + 0.55 * Math.max(k * (1 - cm), cm * 0.55, S.pin ? 0.6 : 0, st === 'loading' ? 0.6 : 0);
+  const big = 1 - cm;   // how "full size" the HUD is (radar, waveform)
+
+  // radar sweep + expanding pings around the orb when the desktop is clear
+  if (big > 0.05 && !S.pin) {
+    const rr = R * 3.1;
+    for (let i = 0; i < 3; i++) {
+      const ph = ((t * 0.22 + i / 3) % 1), r = rr + ph * R * 2.2;
+      ctx.strokeStyle = rgba(c, 0.18 * (1 - ph) * big * (0.4 + 0.6 * k)); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.stroke();
+    }
+    const sw = t * 0.9;
+    const g = ctx.createConicGradient ? ctx.createConicGradient(sw, cx, cy) : null;
+    if (g) {
+      g.addColorStop(0, rgba(c, 0.20 * big * (0.3 + 0.7 * k))); g.addColorStop(0.08, rgba(c, 0)); g.addColorStop(1, rgba(c, 0));
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, rr * 1.25, 0, 7); ctx.fill();
+    }
+  }
 
   // glow
   const pulse = 1 + 0.06 * Math.sin(t * 2) + lv * 0.25;
   let g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 3.2 * pulse);
-  g.addColorStop(0, rgba(c, 0.35 * alpha)); g.addColorStop(0.4, rgba(c, 0.10 * alpha)); g.addColorStop(1, rgba(c, 0));
+  g.addColorStop(0, rgba(c, 0.28 * alpha)); g.addColorStop(0.4, rgba(c, 0.09 * alpha)); g.addColorStop(1, rgba(c, 0));
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, R * 3.2 * pulse, 0, 7); ctx.fill();
 
   // radial audio bars
   for (let i = 0; i < NBARS; i++) {
     const a = (i / NBARS) * Math.PI * 2 + t * 0.08 * speed;
     const wob = 0.35 + 0.65 * Math.abs(Math.sin(i * 1.7 + t * 6) * Math.cos(i * 0.6 - t * 3));
-    const want = (S.state === 'listening' || S.state === 'speaking') ? lv * wob : 0.04 + 0.03 * Math.sin(t * 2 + i);
+    const want = (st === 'listening' || st === 'speaking') ? lv * wob : 0.04 + 0.03 * Math.sin(t * 2 + i);
     bars[i] += (want - bars[i]) * 0.4;
     const r0 = R * 1.55, r1 = r0 + 6 + bars[i] * R * 1.1;
     ctx.strokeStyle = rgba(c, (0.35 + 0.65 * bars[i]) * alpha);
@@ -178,7 +269,7 @@ function frame(ms) {
 
   // arc-reactor rings
   ctx.lineWidth = 2;
-  const rings = [[R * 1.25, 3, 0.7, 1], [R * 1.05, 5, 0.55, -1.4], [R * 0.85, 2, 0.8, 2.1]];
+  const rings = [[R * 1.25, 3, 0.7, 1], [R * 1.05, 5, 0.55, -1.4], [R * 0.9, 2, 0.8, 2.1]];
   for (const [rr, segs, frac, dir] of rings) {
     const base = t * speed * dir;
     for (let s = 0; s < segs; s++) {
@@ -195,38 +286,89 @@ function frame(ms) {
     ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0); ctx.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); ctx.stroke();
   }
 
-  // core
-  const cr = R * (0.55 + 0.1 * lv + 0.03 * Math.sin(t * 3));
-  g = ctx.createRadialGradient(cx, cy, 0, cx, cy, cr);
-  g.addColorStop(0, `rgba(255,255,255,${0.95 * alpha})`); g.addColorStop(0.35, rgba(c, 0.9 * alpha)); g.addColorStop(1, rgba(c, 0.05));
-  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, cr, 0, 7); ctx.fill();
-
-  // thinking: orbiting dots
-  if (S.state === 'thinking') {
-    for (let i = 0; i < 3; i++) {
-      const a = t * 4 + i * 2.094;
-      ctx.fillStyle = rgba(c, 0.95);
-      ctx.beginPath(); ctx.arc(cx + Math.cos(a) * R * 2.0, cy + Math.sin(a) * R * 2.0, 4, 0, 7); ctx.fill();
+  // hold-to-talk: expanding rings from the orb
+  if (S.hold > 0.02) {
+    for (let i = 0; i < 2; i++) {
+      const ph = (t * 1.1 + i * 0.5) % 1;
+      ctx.strokeStyle = rgba(c, 0.8 * (1 - ph) * S.hold); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(cx, cy, R * (1.7 + ph * 1.1), 0, 7); ctx.stroke();
     }
   }
 
-  // linear waveform under the captions
-  if (k * (1 - cm) > 0.02) {
+  // the digital brain at the heart of it
+  g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.85);
+  g.addColorStop(0, rgba(c, 0.30 * alpha + lv * 0.2)); g.addColorStop(1, rgba(c, 0));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, R * 0.85, 0, 7); ctx.fill();
+  brain.update(dt, st, lv);
+  brain.draw(ctx, cx, cy, R, t, c, Math.min(1, alpha + 0.25));
+  if (frameNo % 15 === 0) { $('i-syn').textContent = brain.firing; }
+
+  // thinking: orbiting dots
+  if (st === 'thinking') {
+    for (let i = 0; i < 3; i++) {
+      const a = t * 4 + i * 2.094;
+      ctx.fillStyle = rgba(c, 0.95);
+      ctx.beginPath(); ctx.arc(cx + Math.cos(a) * R * 2.0, cy + Math.sin(a) * R * 2.0, 4 - cm * 1.5, 0, 7); ctx.fill();
+    }
+  }
+
+  // linear waveform under the captions (big, unpinned layout only)
+  const lk = k * big * (S.pin ? 0 : 1);
+  if (lk > 0.02) {
     const n = lin.length, bw = 6, gap = 5, total = n * (bw + gap), x0 = W / 2 - total / 2, yb = H - 26;
     for (let i = 0; i < n; i++) {
       const env = Math.sin((i / (n - 1)) * Math.PI);
       const wob = 0.4 + 0.6 * Math.abs(Math.sin(i * 0.9 + t * 7) * Math.cos(i * 0.4 - t * 4));
-      const want = (S.state === 'listening' || S.state === 'speaking') ? lv * wob * env : 0.02 * env;
+      const want = (st === 'listening' || st === 'speaking') ? lv * wob * env : 0.02 * env;
       lin[i] += (want - lin[i]) * 0.4;
       const h = 3 + lin[i] * 46;
-      ctx.fillStyle = rgba(c, (0.4 + 0.6 * lin[i]) * k * (1 - cm));
+      ctx.fillStyle = rgba(c, (0.4 + 0.6 * lin[i]) * lk);
       ctx.fillRect(x0 + i * (bw + gap), yb - h / 2, bw, h);
     }
   }
 
+  if (frameNo % 3 === 0) { drawEeg(c); Perf.draw($('perfc'), c); }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+// ---------- mouse: hold-to-talk, drag to move ----------
+// The overlay ignores the mouse (clicks pass to your desktop) except while the pointer is over the
+// visualizer or the launcher. mousemove events are still forwarded to us so we can tell.
+let interactive = false, dragging = null;
+function setInteractive(v) { if (v !== interactive) { interactive = v; window.jarvis.setInteractive && window.jarvis.setInteractive(v); } }
+const overOrb = (x, y) => Math.hypot(x - orbNow.x, y - orbNow.y) < orbNow.R * 1.75 + 6;
+
+document.addEventListener('mousemove', (e) => {
+  if (dragging) {
+    setPin({ x: (e.clientX - dragging.dx) / W, y: (e.clientY - dragging.dy) / H });
+    return;
+  }
+  const on = overOrb(e.clientX, e.clientY);
+  setInteractive(on || pttActive || !!(e.target.closest && e.target.closest('.interactive')));
+  document.body.style.cursor = on ? 'pointer' : '';
+  $('corner').classList.toggle('hover', on);
+});
+document.addEventListener('mouseleave', () => { if (!dragging && !pttActive) setInteractive(false); });
+document.addEventListener('mousedown', (e) => {
+  if (!overOrb(e.clientX, e.clientY)) return;
+  e.preventDefault();
+  if (e.button === 0) {                       // hold to talk (also cuts Jarvis off mid-sentence)
+    pttActive = true; refreshLabel(); send({ type: 'ptt_down' });
+  } else if (e.button === 2) {                // right-drag to move
+    dragging = { dx: e.clientX - orbNow.x, dy: e.clientY - orbNow.y };
+    document.body.style.cursor = 'grabbing';
+    setInteractive(true);
+  } else if (e.button === 1) {                // middle-click: back to the default spot
+    setPin(null);
+  }
+});
+document.addEventListener('mouseup', (e) => {
+  if (e.button === 0 && pttActive) { pttActive = false; refreshLabel(); send({ type: 'ptt_up' }); }
+  if (e.button === 2 && dragging) { dragging = null; document.body.style.cursor = ''; }
+});
+addEventListener('contextmenu', (e) => e.preventDefault());
+addEventListener('blur', () => { if (pttActive) { pttActive = false; refreshLabel(); send({ type: 'ptt_up' }); } });
 
 setState('loading');
 connect();

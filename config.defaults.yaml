@@ -50,6 +50,20 @@ tts:
 hud:
   ignore_apps: []      # programs whose windows should NOT count, e.g. [spotify, discord]
 
+# --- Quick-launch dock (the clickable tiles on the HUD) --------------------------
+# Each tile needs a name and ONE of:  app: (a program)  |  path: (a folder or file)  |  url: (a website)
+# icon is optional (any emoji or short text). Put your own list in settings.yaml to replace this one.
+launcher:
+  - {name: Chrome,    icon: "🌐", app: chrome}
+  - {name: Spotify,   icon: "🎵", app: spotify}
+  - {name: Downloads, icon: "📥", path: downloads}
+  - {name: Documents, icon: "📁", path: documents}
+  - {name: Desktop,   icon: "🖥", path: desktop}
+  - {name: Calc,      icon: "🧮", app: calculator}
+  - {name: Gmail,     icon: "✉",  url: "https://mail.google.com"}
+  - {name: YouTube,   icon: "▶",  url: "https://www.youtube.com"}
+  - {name: Settings,  icon: "⚙",  app: settings}
+
 # --- App launcher aliases -------------------------------------------------
 # name you say -> what Windows should launch. Anything not listed here is
 # looked up automatically in your Start Menu shortcuts.

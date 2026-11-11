@@ -1,4 +1,4 @@
-const { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage, screen } = require('electron');
+const { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage, screen, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -48,6 +48,9 @@ function createWindow() {
   win.loadFile('index.html');
 }
 
+// The overlay ignores the mouse except while the renderer says the pointer is over the visualizer / launcher.
+ipcMain.on('interactive', (_e, on) => { if (win) win.setIgnoreMouseEvents(!on, { forward: true }); });
+
 app.whenReady().then(() => {
   startBackend();
   createWindow();
@@ -59,6 +62,7 @@ app.whenReady().then(() => {
   tray.setToolTip('Jarvis');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Talk to Jarvis', click: () => win.webContents.send('hotkey') },
+    { label: 'Reset visualizer position', click: () => win.webContents.send('reset-orb') },
     { label: 'Show / hide HUD', click: () => win.webContents.send('toggle-hud') },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },

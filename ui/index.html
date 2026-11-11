@@ -11,71 +11,124 @@
                font-family: "Segoe UI", "Consolas", sans-serif; user-select: none; }
   #hud { position: fixed; inset: 0; transition: opacity .6s; }
   #hud.hidden { opacity: 0; }
-  canvas { position: fixed; inset: 0; }
+  canvas#c { position: fixed; inset: 0; pointer-events: none; }
 
-  .panel { position: fixed; color: rgb(var(--c)); font-family: Consolas, monospace; font-size: 12px;
+  /* ---- panels: dark glass with corner brackets ---- */
+  .panel { position: fixed; color: rgb(var(--c)); font-family: Consolas, monospace; font-size: 11px;
            letter-spacing: .12em; text-transform: uppercase; transition: opacity .6s;
-           text-shadow: 0 0 8px rgba(var(--c), .6); }
-  .dim .panel { opacity: .45; }
-  .panel.covered, .dim .panel.covered { opacity: 0 !important; }   /* a window is on top of it: tuck it away */
+           background: linear-gradient(180deg, rgba(4, 16, 28, .62), rgba(3, 10, 20, .46));
+           border: 1px solid rgba(var(--c), .22); padding: 10px 14px; box-sizing: border-box;
+           text-shadow: 0 0 8px rgba(var(--c), .5); backdrop-filter: blur(5px); }
+  .panel::before, .panel::after { content: ""; position: absolute; width: 10px; height: 10px; pointer-events: none; }
+  .panel::before { top: -1px; left: -1px; border-top: 2px solid rgb(var(--c)); border-left: 2px solid rgb(var(--c)); }
+  .panel::after { bottom: -1px; right: -1px; border-bottom: 2px solid rgb(var(--c)); border-right: 2px solid rgb(var(--c)); }
+  .ph { font-size: 10px; letter-spacing: .28em; opacity: .75; margin: -2px 0 8px; display: flex; align-items: center; gap: 8px; }
+  .ph::before { content: ""; width: 6px; height: 6px; background: rgb(var(--c)); box-shadow: 0 0 8px rgb(var(--c)); }
+  .ph::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(var(--c), .5), transparent); }
+  .dim .panel { opacity: .5; }
+  .panel.covered, .dim .panel.covered { opacity: 0 !important; pointer-events: none; }   /* a window is on top of it: tuck it away */
 
-  /* compact mode: a window is open, so stay small in the bottom-right corner */
-  #corner { position: fixed; right: 142px; bottom: 112px; text-align: right; color: rgb(var(--c));
-            font: 11px Consolas, monospace; letter-spacing: .2em; text-transform: uppercase;
-            text-shadow: 0 0 8px rgba(var(--c), .6); opacity: 0; transition: opacity .6s; }
-  body.compact #corner { opacity: .85; }
-  body.compact #caption { left: auto; right: 28px; bottom: 190px; transform: none; width: 380px; max-width: 380px;
-                          text-align: right; padding: 10px 14px; border-radius: 10px;
-                          background: rgba(4, 14, 24, .72); border-right: 2px solid rgba(var(--c), .8); }
-  body.compact #cap-user { font-size: 13px; margin-bottom: 4px; }
-  body.compact #cap-ai { font-size: 16px; line-height: 1.35; text-shadow: none; }
-
-  #clockbox { top: 28px; right: 36px; text-align: right;
-              border-right: 2px solid rgba(var(--c), .7); padding: 6px 14px 6px 0; }
-  #time { font-size: 34px; font-weight: 300; letter-spacing: .08em; }
-  #date { opacity: .75; margin-top: 2px; }
-  #stats { top: 120px; right: 36px; width: 190px; }
-  .stat { margin-bottom: 10px; }
-  .stat .row { display: flex; justify-content: space-between; margin-bottom: 3px; }
-  .bar { height: 3px; background: rgba(var(--c), .18); }
-  .bar > i { display: block; height: 100%; width: 0; background: rgb(var(--c));
-             box-shadow: 0 0 8px rgb(var(--c)); transition: width .8s; }
-  #status { top: 36px; left: 36px; border-left: 2px solid rgba(var(--c), .7); padding-left: 12px; }
-  #status b { display: block; font-size: 18px; font-weight: 400; letter-spacing: .2em; }
-  #log { top: 100px; left: 36px; width: 360px; line-height: 1.7; opacity: .8; }
-  #log div { animation: slide .4s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* left column */
+  #status { top: 28px; left: 28px; width: 270px; }
+  #status b { display: block; font-size: 19px; font-weight: 400; letter-spacing: .22em; margin-top: 2px; }
+  #status #name { opacity: .7; font-size: 10px; letter-spacing: .35em; }
+  #core { top: 104px; left: 28px; width: 270px; }
+  #core .kv { display: flex; justify-content: space-between; line-height: 1.75; }
+  #core .kv span:first-child { opacity: .6; }
+  #eeg { display: block; width: 100%; height: 38px; margin-top: 6px; }
+  #log { top: 262px; left: 28px; width: 270px; line-height: 1.7; }
+  #log div { animation: slide .4s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .85; }
+  #log:empty { display: none; }
   @keyframes slide { from { opacity: 0; transform: translateX(-12px); } }
-
-  #timers { top: 300px; left: 36px; width: 260px; }
+  #timers { top: 420px; left: 28px; width: 270px; }
+  #timers:empty { display: none; }
   #timers div { display: flex; justify-content: space-between; margin-bottom: 6px;
                 border-left: 2px solid rgba(var(--c), .5); padding-left: 10px; }
 
+  /* right column */
+  #clockbox { top: 28px; right: 28px; width: 320px; text-align: right; }
+  #time { font-size: 38px; font-weight: 300; letter-spacing: .08em; line-height: 1.05; }
+  #date { opacity: .75; margin-top: 2px; }
+  #secbar { height: 2px; margin-top: 7px; background: rgba(var(--c), .15); }
+  #secbar i { display: block; height: 100%; width: 0; background: rgb(var(--c)); box-shadow: 0 0 8px rgb(var(--c)); }
+  #perf { top: 140px; right: 28px; width: 320px; }
+  #perfc { display: block; width: 292px; height: 278px; }
+  #procs { margin-top: 4px; }
+  #procs .row { display: flex; justify-content: space-between; line-height: 1.7; opacity: .9; }
+  #sysline { margin-top: 6px; opacity: .6; display: flex; justify-content: space-between; }
+
+  /* quick launch dock (clickable) */
+  #dock { bottom: 70px; left: 28px; width: 270px; }
+  #tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  .tile { position: relative; padding: 8px 2px 6px; text-align: center; cursor: pointer;
+          border: 1px solid rgba(var(--c), .25); background: rgba(var(--c), .06);
+          clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+          transition: background .15s, border-color .15s, transform .1s; }
+  .tile:hover { background: rgba(var(--c), .22); border-color: rgba(var(--c), .9); text-shadow: 0 0 12px rgb(var(--c)); }
+  .tile:active { transform: scale(.94); background: rgba(var(--c), .4); }
+  .tile .ic { font-size: 20px; line-height: 26px; height: 26px; font-family: "Segoe UI Emoji", "Segoe UI", sans-serif; text-transform: none; }
+  .tile .nm { font-size: 9px; letter-spacing: .08em; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 3px; }
+  #dock .empty { opacity: .6; line-height: 1.6; text-transform: none; letter-spacing: .02em; }
+
+  /* screen-corner frame (only with a clear desktop) */
+  .frame { position: fixed; width: 46px; height: 46px; pointer-events: none; transition: opacity .6s; opacity: .55; }
+  .frame.tl { top: 8px; left: 8px; border-top: 2px solid rgb(var(--c)); border-left: 2px solid rgb(var(--c)); }
+  .frame.tr { top: 8px; right: 8px; border-top: 2px solid rgb(var(--c)); border-right: 2px solid rgb(var(--c)); }
+  .frame.bl { bottom: 8px; left: 8px; border-bottom: 2px solid rgb(var(--c)); border-left: 2px solid rgb(var(--c)); }
+  .frame.br { bottom: 8px; right: 8px; border-bottom: 2px solid rgb(var(--c)); border-right: 2px solid rgb(var(--c)); }
+  body.compact .frame, body.pinned .frame { opacity: 0; }
+
+  /* captions + labels */
   #caption { position: fixed; left: 50%; bottom: 70px; transform: translateX(-50%); width: 900px; max-width: 70vw;
-             text-align: center; transition: opacity .8s; opacity: 0; }
+             text-align: center; transition: opacity .8s; opacity: 0; pointer-events: none; }
   #caption.show { opacity: 1; }
   #cap-user { color: rgba(var(--c), .65); font-size: 16px; margin-bottom: 8px; font-style: italic; }
-  #cap-ai { color: #eaffff; font-size: 24px; font-weight: 300; line-height: 1.35;
-            text-shadow: 0 0 14px rgba(var(--c), .9); }
+  #cap-ai { color: #eaffff; font-size: 24px; font-weight: 300; line-height: 1.35; text-shadow: 0 0 14px rgba(var(--c), .9); }
+  body.follow #caption { box-sizing: border-box; transform: none; width: 380px; max-width: 380px; padding: 10px 14px; border-radius: 10px;
+                         background: rgba(4, 14, 24, .78); border: 1px solid rgba(var(--c), .35); }
+  body.follow #cap-user { font-size: 13px; margin-bottom: 4px; }
+  body.follow #cap-ai { font-size: 16px; text-shadow: none; }
+
+  #corner { position: fixed; color: rgb(var(--c)); font: 11px Consolas, monospace; letter-spacing: .2em; text-transform: uppercase;
+            text-shadow: 0 0 8px rgba(var(--c), .6); opacity: 0; transition: opacity .6s; pointer-events: none; white-space: nowrap; }
+  body.follow #corner { opacity: .85; }
+  #hint { display: block; opacity: 0; font-size: 9px; letter-spacing: .12em; margin-top: 3px; transition: opacity .3s; }
+  #corner.hover #hint { opacity: .7; }
 </style>
 </head>
 <body>
 <div id="hud">
   <canvas id="c"></canvas>
+  <div class="frame tl"></div><div class="frame tr"></div><div class="frame bl"></div><div class="frame br"></div>
 
   <div id="status" class="panel"><span id="name">JARVIS</span><b id="state">INITIALISING</b></div>
+
+  <div id="core" class="panel">
+    <div class="ph">Neural core</div>
+    <div class="kv"><span>Brain</span><span id="i-brain">--</span></div>
+    <div class="kv"><span>Voice</span><span id="i-voice">--</span></div>
+    <div class="kv"><span>Synapses firing</span><span id="i-syn">0</span></div>
+    <canvas id="eeg" width="240" height="38"></canvas>
+  </div>
   <div id="log" class="panel"></div>
   <div id="timers" class="panel"></div>
 
-  <div id="clockbox" class="panel"><div id="time">--:--</div><div id="date"></div></div>
-  <div id="stats" class="panel">
-    <div class="stat"><div class="row"><span>CPU</span><span id="cpuv">--</span></div><div class="bar"><i id="cpub"></i></div></div>
-    <div class="stat"><div class="row"><span>MEM</span><span id="memv">--</span></div><div class="bar"><i id="memb"></i></div></div>
+  <div id="dock" class="panel interactive"><div class="ph">Quick launch</div><div id="tiles"></div></div>
+
+  <div id="clockbox" class="panel"><div id="time">--:--</div><div id="date"></div><div id="secbar"><i id="secfill"></i></div></div>
+  <div id="perf" class="panel">
+    <div class="ph">Performance hub</div>
+    <canvas id="perfc"></canvas>
+    <div id="procs"></div>
+    <div id="sysline"><span id="up">UP --</span><span id="bat"></span></div>
   </div>
 
-  <div id="corner"><span id="cstate"></span></div>
+  <div id="corner"><span id="cstate"></span><span id="hint">HOLD: TALK · RIGHT-DRAG: MOVE</span></div>
   <div id="caption"><div id="cap-user"></div><div id="cap-ai"></div></div>
 </div>
 <script src="layout.js"></script>
+<script src="brain.js"></script>
+<script src="perf.js"></script>
 <script src="renderer.js"></script>
 </body>
 </html>

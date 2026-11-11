@@ -123,3 +123,19 @@ Wake word and speech-to-text run on your machine. Only the text of what you say 
 - Speech speed: in `settings.yaml` set `tts: piper: speed: 1.25` (1.0 = normal, 1.1-1.3 = snappier). `expressiveness` and `rhythm` make the voice more or less varied.
 - When any window is open, the orb shrinks into the bottom-right corner and the clock, name badge, stats and log hide wherever a window covers them. With a clear desktop it stays large.
 - To make certain programs not count as "a window is open", add them under `hud: ignore_apps: [spotify]` in `settings.yaml`.
+
+## Command-center HUD
+
+- **Move the visualizer:** hold the RIGHT mouse button on it and drag it anywhere (over other windows too). It remembers where you left it. Middle-click it, or use the tray menu, to put it back.
+- **Talk to it:** press and HOLD the LEFT mouse button on the visualizer, speak, and let go. Pressing it while Jarvis is talking cuts him off first. A quick tap only interrupts.
+- **Quick-launch tiles:** the dock on the left. Click a tile to open that app, folder or website. Make your own list in `settings.yaml`:
+
+```yaml
+launcher:
+  - {name: Chrome,   icon: "🌐", app: chrome}
+  - {name: Bids,     icon: "📐", path: "C:\\Users\\you\\Documents\\Bids"}
+  - {name: Outlook,  icon: "✉",  url: "https://outlook.office.com"}
+```
+  Each tile needs a `name` plus one of `app:`, `path:` or `url:`. `icon` is optional (any emoji). Your list replaces the default one.
+- **Performance hub:** CPU, memory and disk gauges, 60-second load and network charts, per-core bars and the top programs.
+- **Neural core:** the brain in the middle fires faster while Jarvis is thinking and pulses with his voice.

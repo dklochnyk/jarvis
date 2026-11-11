@@ -9,6 +9,7 @@ import traceback
 
 import voice
 from brain import Brain
+from launcher import Launcher
 from tools import Tools
 
 
@@ -20,6 +21,10 @@ class Jarvis:
         self.stop = threading.Event()  # set to interrupt speech / generation
         self.busy = False
         self.restart_requested = False
+        self.ptt_held = threading.Event()       # left mouse button held on the visualizer
+        self.ptt_down_at = 0.0
+        self.launcher = Launcher(cfg)
+        self.tools = None
         self.followup_until = 0.0
         self.announcements = queue.Queue()      # timers / reminders waiting to be spoken
         self.preroll = collections.deque(maxlen=6)  # last ~0.5 s of audio, so the first word isn't clipped
@@ -31,8 +36,24 @@ class Jarvis:
         t = cmd.get("type")
         if t == "interrupt" or (t == "hotkey" and self.busy):
             self.stop.set()
+        elif t == "ptt_down":
+            self.ptt_held.set()
+            self.ptt_down_at = time.time()
+            if self.busy:
+                self.stop.set()  # pressing the visualizer cuts Jarvis off, then he listens to you
+            self.commands.put({"type": "ptt"})
+        elif t == "ptt_up":
+            self.ptt_held.clear()
+        elif t == "launch":
+            threading.Thread(target=self._launch, args=(cmd.get("index"),), daemon=True).start()
         elif t in ("hotkey", "text"):
             self.commands.put(cmd)
+
+    def _launch(self, index):
+        if self.tools is None:
+            return
+        result = self.launcher.run(index, self.tools)
+        self.emit(type="log", text=result)
 
     def announce(self, text):
         """Thread-safe: speak `text` as soon as Jarvis is idle (used by timers and reminders)."""
@@ -62,7 +83,7 @@ class Jarvis:
         self.stt = voice.STT(self.cfg.get("stt", {}))
         self.wake = voice.WakeWord(self.cfg.get("wake_word", "hey_jarvis"), float(self.cfg.get("wake_threshold", 0.5)))
         self.tts = voice.make_tts(self.cfg.get("tts", {}), lambda m: self.emit(type="log", text=m))
-        tools = Tools(self.cfg, announce=self.announce, emit=self.emit, request_restart=self.request_restart)
+        tools = self.tools = Tools(self.cfg, announce=self.announce, emit=self.emit, request_restart=self.request_restart)
         if self.cfg.get("provider", "claude") == "gemini":
             from brain_gemini import GeminiBrain
 
@@ -75,6 +96,9 @@ class Jarvis:
         self.silence = float(self.cfg.get("silence_seconds", 1.1))
         self.max_rec = float(self.cfg.get("max_record_seconds", 20))
         self.followup = float(self.cfg.get("followup_seconds", 7))
+        model = getattr(self.brain, "model", None) or self.cfg.get("model", "")
+        self.emit(type="info", provider=self.cfg.get("provider", "claude"), model=str(model),
+                  voice=(self.cfg.get("tts") or {}).get("provider", "piper"))
 
     # ---- main loop ----------------------------------------------------------
     def run(self):
@@ -103,6 +127,8 @@ class Jarvis:
                 self._converse(cmd["text"].strip())
             elif cmd["type"] == "hotkey":
                 self._listen()
+            elif cmd["type"] == "ptt":
+                self._listen(ptt=True)
             return
 
         try:
@@ -143,16 +169,28 @@ class Jarvis:
         armed = time.time() < self.followup_until
         self.emit(type="state", state="idle", followup=armed)
 
-    def _listen(self, initial=None):
-        self.emit(type="state", state="listening")
-        audio = voice.record_utterance(
-            self.mic,
-            lambda v: self.emit(type="level", source="mic", value=v),
-            self._threshold(),
-            self.silence,
-            self.max_rec,
-            initial=initial,
-        )
+    def _listen(self, initial=None, ptt=False):
+        if ptt:
+            # a quick tap on the visualizer only interrupts; holding it means "talk to me"
+            if not self.ptt_held.is_set() and time.time() - self.ptt_down_at < 0.35:
+                self.followup_until = 0
+                return self._idle()
+            self.stop.clear()
+            self.mic.flush()
+            self.emit(type="state", state="listening")
+            audio = voice.record_held(
+                self.mic, lambda v: self.emit(type="level", source="mic", value=v), self.ptt_held.is_set, self.max_rec
+            )
+        else:
+            self.emit(type="state", state="listening")
+            audio = voice.record_utterance(
+                self.mic,
+                lambda v: self.emit(type="level", source="mic", value=v),
+                self._threshold(),
+                self.silence,
+                self.max_rec,
+                initial=initial,
+            )
         if audio is None:
             self.followup_until = 0
             return self._idle()

@@ -27,13 +27,13 @@ class Hub:
         self.clients = set()
         self.loop = None
         self.state = {"type": "state", "state": "loading"}
-        self.desktop = None
+        self.sticky = {}  # latest event of these types is replayed to HUDs that connect later
 
     def emit(self, **ev):
         if ev.get("type") == "state":
             self.state = ev
-        if ev.get("type") == "desktop":
-            self.desktop = ev
+        if ev.get("type") in ("desktop", "launcher", "info"):
+            self.sticky[ev["type"]] = ev
         if ev.get("type") in ("log", "error"):
             print(f"[{ev['type']}] {ev['text']}", flush=True)
         if self.loop is None:
@@ -81,11 +81,16 @@ def demo_loop(hub):
 
 
 async def stats_loop(hub):
-    psutil.cpu_percent(None)
+    from sysstats import Sampler
+
+    sampler = Sampler()
     while True:
-        await asyncio.sleep(2)
+        await asyncio.sleep(1)
         if hub.clients:
-            hub.emit(type="stats", cpu=psutil.cpu_percent(None), mem=psutil.virtual_memory().percent)
+            try:
+                hub.emit(type="stats", **sampler.sample())
+            except Exception as e:
+                print(f"[stats] {e}", flush=True)
 
 
 async def amain(hub, assistant):
@@ -97,8 +102,8 @@ async def amain(hub, assistant):
         hub.clients.add(ws)
         try:
             await ws.send(json.dumps(hub.state))
-            if hub.desktop:
-                await ws.send(json.dumps(hub.desktop))
+            for ev in list(hub.sticky.values()):
+                await ws.send(json.dumps(ev))
             async for raw in ws:
                 try:
                     cmd = json.loads(raw)
@@ -149,6 +154,9 @@ def main():
     from desktop import DesktopWatcher
 
     DesktopWatcher(hub.emit, cfg.get("hud", {})).start()
+    from launcher import Launcher
+
+    hub.emit(type="launcher", items=Launcher(cfg).public())
     if args.demo:
         threading.Thread(target=demo_loop, args=(hub,), daemon=True).start()
     else:
