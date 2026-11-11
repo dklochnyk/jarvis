@@ -117,3 +117,9 @@ at the top of `ui/main.js`.
 
 Wake word and speech-to-text run on your machine. Only the text of what you say goes to Google (or Anthropic)
 (and to ElevenLabs, if you choose that voice).
+
+## Voice speed and HUD layout
+
+- Speech speed: in `settings.yaml` set `tts: piper: speed: 1.25` (1.0 = normal, 1.1-1.3 = snappier). `expressiveness` and `rhythm` make the voice more or less varied.
+- When any window is open, the orb shrinks into the bottom-right corner and the clock, name badge, stats and log hide wherever a window covers them. With a clear desktop it stays large.
+- To make certain programs not count as "a window is open", add them under `hud: ignore_apps: [spotify]` in `settings.yaml`.

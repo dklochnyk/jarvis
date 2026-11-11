@@ -34,11 +34,21 @@ tts:
   provider: piper
   piper:
     model_path: voices/en_GB-alan-medium.onnx
+    speed: 1.15            # 1.0 = Piper's normal pace. Try 1.1 - 1.3 for snappier speech
+    expressiveness: 0.8    # higher = more varied, natural intonation (0.5 - 1.0)
+    rhythm: 0.9            # higher = looser, more human timing (0.6 - 1.0)
   sapi:
-    rate: 185
+    rate: 205
   elevenlabs:
     voice_id: JBFqnCBsd6RMkjVDRZzb     # swap for any voice in your ElevenLabs library
     model_id: eleven_flash_v2_5
+    speed: 1.1             # 0.7 - 1.2
+
+# --- HUD layout -----------------------------------------------------------
+# When a window is open the orb shrinks into the bottom-right corner, and the clock,
+# name badge, stats etc. hide wherever a window covers them.
+hud:
+  ignore_apps: []      # programs whose windows should NOT count, e.g. [spotify, discord]
 
 # --- App launcher aliases -------------------------------------------------
 # name you say -> what Windows should launch. Anything not listed here is

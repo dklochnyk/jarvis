@@ -26,11 +26,12 @@ const COLORS = {
 };
 const LABEL = { loading: 'Initialising', idle: 'Standing by', listening: 'Listening', thinking: 'Processing', speaking: 'Responding', error: 'Fault' };
 
-const S = { state: 'loading', followup: false, level: 0, target: 0, prom: 0, color: [...COLORS.loading], t: 0 };
+const S = { wins: [], compact: 0, state: 'loading', followup: false, level: 0, target: 0, prom: 0, color: [...COLORS.loading], t: 0 };
 
 function setState(st, followup = false) {
   S.state = st; S.followup = followup;
-  $('state').textContent = (LABEL[st] || st).toUpperCase() + (followup && st === 'idle' ? ' · LISTENING' : '');
+  const lbl = (LABEL[st] || st).toUpperCase() + (followup && st === 'idle' ? ' · LISTENING' : '');
+  $('state').textContent = lbl; $('cstate').textContent = lbl;
   document.body.classList.toggle('dim', st === 'idle' && !followup);
 }
 
@@ -60,6 +61,7 @@ function handle(m) {
       else if (m.role === 'user') { $('cap-user').textContent = '“' + m.text + '”'; $('cap-ai').textContent = ''; }
       else { $('cap-ai').textContent += (($('cap-ai').textContent ? ' ' : '') + m.text); }
       break;
+    case 'desktop': S.wins = m.windows || []; updateCovered(); break;
     case 'tool': addLog('Executing ' + m.name + (m.input && m.input.name ? ': ' + m.input.name : '')); break;
     case 'tool_result': addLog(m.result); break;
     case 'log': addLog(m.text); break;
@@ -71,6 +73,19 @@ function handle(m) {
       break;
   }
 }
+
+// ---------- window awareness ----------
+const PANELS = ['status', 'log', 'timers', 'clockbox', 'stats'];
+function updateCovered() {
+  document.body.classList.toggle('compact', Layout.isCompact(S.wins));
+  for (const id of PANELS) {
+    const el = $(id), r = el.getBoundingClientRect();
+    if (!r.width || !r.height) continue;
+    el.classList.toggle('covered', Layout.covered({ l: r.left, t: r.top, r: r.right, b: r.bottom }, S.wins, innerWidth, innerHeight));
+  }
+}
+setInterval(updateCovered, 400);   // panels resize as logs/timers come and go
+addEventListener('resize', updateCovered);
 
 // ---------- timers panel ----------
 S.timers = [];
@@ -129,15 +144,16 @@ function frame(ms) {
   const lv = S.level;
   const c = S.color;
 
-  // orb sits bottom-right when idle, drifts toward the centre of the screen when active
-  const homeX = W - 150, homeY = H - 170;
-  const actX = W / 2, actY = H / 2 - 40;
+  // No windows: orb sits bottom-right when idle and grows toward the screen centre when active.
+  // Window open: it stays small in the bottom-right corner.
   const k = S.prom * S.prom * (3 - 2 * S.prom);
-  const cx = homeX + (actX - homeX) * k, cy = homeY + (actY - homeY) * k;
-  const R = 42 + 46 * k;
+  const wantC = Layout.isCompact(S.wins) ? 1 : 0;
+  S.compact += (wantC - S.compact) * 0.07;
+  const cm = S.compact * S.compact * (3 - 2 * S.compact);
+  const { x: cx, y: cy, R } = Layout.orb(W, H, cm, k);
   const speed = S.state === 'thinking' ? 3.2 : S.state === 'listening' ? 1.2 : 0.55;
 
-  const alpha = 0.45 + 0.55 * Math.max(k, S.state === 'loading' ? 0.6 : 0);
+  const alpha = 0.45 + 0.55 * Math.max(k * (1 - cm), cm * 0.55, S.state === 'loading' ? 0.6 : 0);
 
   // glow
   const pulse = 1 + 0.06 * Math.sin(t * 2) + lv * 0.25;
@@ -153,7 +169,7 @@ function frame(ms) {
     bars[i] += (want - bars[i]) * 0.4;
     const r0 = R * 1.55, r1 = r0 + 6 + bars[i] * R * 1.1;
     ctx.strokeStyle = rgba(c, (0.35 + 0.65 * bars[i]) * alpha);
-    ctx.lineWidth = 2.2; ctx.lineCap = 'round';
+    ctx.lineWidth = 2.2 - 0.9 * cm; ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
     ctx.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
@@ -195,7 +211,7 @@ function frame(ms) {
   }
 
   // linear waveform under the captions
-  if (k > 0.02) {
+  if (k * (1 - cm) > 0.02) {
     const n = lin.length, bw = 6, gap = 5, total = n * (bw + gap), x0 = W / 2 - total / 2, yb = H - 26;
     for (let i = 0; i < n; i++) {
       const env = Math.sin((i / (n - 1)) * Math.PI);
@@ -203,7 +219,7 @@ function frame(ms) {
       const want = (S.state === 'listening' || S.state === 'speaking') ? lv * wob * env : 0.02 * env;
       lin[i] += (want - lin[i]) * 0.4;
       const h = 3 + lin[i] * 46;
-      ctx.fillStyle = rgba(c, (0.4 + 0.6 * lin[i]) * k);
+      ctx.fillStyle = rgba(c, (0.4 + 0.6 * lin[i]) * k * (1 - cm));
       ctx.fillRect(x0 + i * (bw + gap), yb - h / 2, bw, h);
     }
   }

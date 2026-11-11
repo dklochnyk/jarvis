@@ -27,10 +27,13 @@ class Hub:
         self.clients = set()
         self.loop = None
         self.state = {"type": "state", "state": "loading"}
+        self.desktop = None
 
     def emit(self, **ev):
         if ev.get("type") == "state":
             self.state = ev
+        if ev.get("type") == "desktop":
+            self.desktop = ev
         if ev.get("type") in ("log", "error"):
             print(f"[{ev['type']}] {ev['text']}", flush=True)
         if self.loop is None:
@@ -94,6 +97,8 @@ async def amain(hub, assistant):
         hub.clients.add(ws)
         try:
             await ws.send(json.dumps(hub.state))
+            if hub.desktop:
+                await ws.send(json.dumps(hub.desktop))
             async for raw in ws:
                 try:
                     cmd = json.loads(raw)
@@ -141,6 +146,9 @@ def main():
 
     hub = Hub()
     assistant = None
+    from desktop import DesktopWatcher
+
+    DesktopWatcher(hub.emit, cfg.get("hud", {})).start()
     if args.demo:
         threading.Thread(target=demo_loop, args=(hub,), daemon=True).start()
     else:

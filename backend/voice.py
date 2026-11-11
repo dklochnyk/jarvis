@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import wave
 
@@ -177,6 +178,17 @@ def _read_wav(path):
     return data, sr
 
 
+def _trim(audio, sr, thresh=300, keep_ms=40):
+    """Cut dead air from the start/end of a synthesized sentence so sentences flow together."""
+    if audio is None or len(audio) == 0:
+        return audio
+    idx = np.flatnonzero(np.abs(audio) > thresh)
+    if len(idx) == 0:
+        return audio
+    keep = int(sr * keep_ms / 1000)
+    return audio[max(0, idx[0] - keep) : idx[-1] + keep]
+
+
 class TTS:
     """Subclasses implement synth(text) -> (int16 mono array, sample_rate)."""
 
@@ -184,37 +196,140 @@ class TTS:
         raise NotImplementedError
 
     def speak(self, text, stop, on_level):
-        audio, sr = self.synth(text)
-        if audio is None or len(audio) == 0:
-            return
-        block = int(sr * 0.04)
-        with sd.OutputStream(samplerate=sr, channels=1, dtype="int16") as out:
-            for i in range(0, len(audio), block):
-                if stop.is_set():
+        sp = Speaker(self, stop, on_level)
+        sp.put(text)
+        sp.finish()
+        sp.join()
+
+
+class Speaker:
+    """Pipelined speech: one thread synthesizes the next sentence while another plays the
+    current one through a single open audio stream, so there are no gaps between sentences."""
+
+    def __init__(self, tts, stop, on_level, on_start=None, on_error=None):
+        self.tts, self.stop, self.on_level = tts, stop, on_level
+        self.on_start, self.on_error = on_start, on_error
+        self.texts = queue.Queue()
+        self.audio = queue.Queue(maxsize=3)
+        self._started = False
+        self._t1 = threading.Thread(target=self._synth_loop, daemon=True)
+        self._t2 = threading.Thread(target=self._play_loop, daemon=True)
+        self._t1.start()
+        self._t2.start()
+
+    def put(self, text):
+        self.texts.put(text)
+
+    def finish(self):
+        self.texts.put(None)
+
+    def join(self):
+        self._t1.join()
+        self._t2.join()
+
+    def _synth_loop(self):
+        while True:
+            text = self.texts.get()
+            if text is None:
+                break
+            if self.stop.is_set():
+                continue
+            try:
+                audio, sr = self.tts.synth(text)
+                audio = _trim(audio, sr)
+                if audio is not None and len(audio):
+                    self.audio.put((audio, sr))
+            except Exception as e:
+                if self.on_error:
+                    self.on_error(e)
+        self.audio.put(None)
+
+    def _play_loop(self):
+        out, cur_sr = None, None
+        try:
+            while True:
+                item = self.audio.get()
+                if item is None:
                     break
-                chunk = audio[i : i + block]
-                on_level(min(1.0, rms(chunk) * 6.0))
-                out.write(chunk.reshape(-1, 1))
-        on_level(0.0)
+                if self.stop.is_set():
+                    continue
+                audio, sr = item
+                if out is None or sr != cur_sr:
+                    if out is not None:
+                        out.stop(); out.close()
+                    out = sd.OutputStream(samplerate=sr, channels=1, dtype="int16")
+                    out.start()
+                    cur_sr = sr
+                if not self._started:
+                    self._started = True
+                    if self.on_start:
+                        self.on_start()
+                block = int(sr * 0.04)
+                for i in range(0, len(audio), block):
+                    if self.stop.is_set():
+                        break
+                    chunk = audio[i : i + block]
+                    self.on_level(min(1.0, rms(chunk) * 6.0))
+                    out.write(chunk.reshape(-1, 1))
+        except Exception as e:
+            if self.on_error:
+                self.on_error(e)
+        finally:
+            if out is not None:
+                try:
+                    out.stop(); out.close()
+                except Exception:
+                    pass
+            self.on_level(0.0)
 
 
 class PiperTTS(TTS):
+    """Loads the voice once and keeps it in memory (the old version restarted Piper per sentence)."""
+
     def __init__(self, cfg):
         path = cfg.get("model_path", "voices/en_GB-alan-medium.onnx")
         self.model = path if os.path.isabs(path) else os.path.join(ROOT, path)
         if not os.path.exists(self.model):
             raise FileNotFoundError(f"Piper voice not found at {self.model} (run scripts/download_assets.py)")
-        import piper  # noqa: F401  (fail early if not installed)
+        self.speed = max(0.5, min(2.0, float(cfg.get("speed", 1.15))))
+        self.expressive = float(cfg.get("expressiveness", 0.8))  # noise_scale: higher = more varied
+        self.rhythm = float(cfg.get("rhythm", 0.9))  # noise_w_scale: higher = looser timing
+        self.voice = None
+        self.syn = None
+        try:
+            from piper import PiperVoice, SynthesisConfig
+
+            self.voice = PiperVoice.load(self.model)
+            self.syn = SynthesisConfig(
+                length_scale=1.0 / self.speed, noise_scale=self.expressive, noise_w_scale=self.rhythm
+            )
+            # warm up so the first real sentence is quick
+            for _ in self.voice.synthesize("Ready.", syn_config=self.syn):
+                pass
+        except Exception as e:
+            print(f"[tts] in-process Piper unavailable ({e}); using slower command-line mode.")
+            self.voice = None
+            import piper  # noqa: F401  (still fail early if not installed at all)
 
     def synth(self, text):
+        if self.voice is not None:
+            chunks, sr = [], self.voice.config.sample_rate
+            for c in self.voice.synthesize(text, syn_config=self.syn):
+                chunks.append(c.audio_int16_array)
+                sr = c.sample_rate
+            if not chunks:
+                return None, sr
+            return np.concatenate(chunks), sr
+        return self._synth_cli(text)
+
+    def _synth_cli(self, text):
         fd, tmp = tempfile.mkstemp(suffix=".wav")
         os.close(fd)
         try:
             subprocess.run(
-                [sys.executable, "-m", "piper", "--model", self.model, "--output_file", tmp],
-                input=text.encode("utf-8"),
-                check=True,
-                capture_output=True,
+                [sys.executable, "-m", "piper", "--model", self.model, "--output_file", tmp,
+                 "--length-scale", str(1.0 / self.speed)],
+                input=text.encode("utf-8"), check=True, capture_output=True,
             )
             return _read_wav(tmp)
         finally:
@@ -230,7 +345,7 @@ class SapiTTS(TTS):
     def __init__(self, cfg):
         import pyttsx3  # noqa: F401
 
-        self.rate = int(cfg.get("rate", 185))
+        self.rate = int(cfg.get("rate", 205))
 
     def synth(self, text):
         import pyttsx3
@@ -258,6 +373,7 @@ class ElevenLabsTTS(TTS):
             raise RuntimeError("ELEVENLABS_API_KEY is not set in .env")
         self.voice = cfg.get("voice_id")
         self.model = cfg.get("model_id", "eleven_flash_v2_5")
+        self.speed = max(0.7, min(1.2, float(cfg.get("speed", 1.1))))
 
     def synth(self, text):
         import requests
@@ -266,7 +382,8 @@ class ElevenLabsTTS(TTS):
             f"https://api.elevenlabs.io/v1/text-to-speech/{self.voice}",
             params={"output_format": "pcm_22050"},
             headers={"xi-api-key": self.key, "Content-Type": "application/json"},
-            json={"text": text, "model_id": self.model},
+            json={"text": text, "model_id": self.model,
+                  "voice_settings": {"speed": self.speed, "stability": 0.4, "similarity_boost": 0.8}},
             timeout=30,
         )
         r.raise_for_status()

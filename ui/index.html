@@ -17,6 +17,18 @@
            letter-spacing: .12em; text-transform: uppercase; transition: opacity .6s;
            text-shadow: 0 0 8px rgba(var(--c), .6); }
   .dim .panel { opacity: .45; }
+  .panel.covered, .dim .panel.covered { opacity: 0 !important; }   /* a window is on top of it: tuck it away */
+
+  /* compact mode: a window is open, so stay small in the bottom-right corner */
+  #corner { position: fixed; right: 142px; bottom: 112px; text-align: right; color: rgb(var(--c));
+            font: 11px Consolas, monospace; letter-spacing: .2em; text-transform: uppercase;
+            text-shadow: 0 0 8px rgba(var(--c), .6); opacity: 0; transition: opacity .6s; }
+  body.compact #corner { opacity: .85; }
+  body.compact #caption { left: auto; right: 28px; bottom: 190px; transform: none; width: 380px; max-width: 380px;
+                          text-align: right; padding: 10px 14px; border-radius: 10px;
+                          background: rgba(4, 14, 24, .72); border-right: 2px solid rgba(var(--c), .8); }
+  body.compact #cap-user { font-size: 13px; margin-bottom: 4px; }
+  body.compact #cap-ai { font-size: 16px; line-height: 1.35; text-shadow: none; }
 
   #clockbox { top: 28px; right: 36px; text-align: right;
               border-right: 2px solid rgba(var(--c), .7); padding: 6px 14px 6px 0; }
@@ -60,8 +72,10 @@
     <div class="stat"><div class="row"><span>MEM</span><span id="memv">--</span></div><div class="bar"><i id="memb"></i></div></div>
   </div>
 
+  <div id="corner"><span id="cstate"></span></div>
   <div id="caption"><div id="cap-user"></div><div id="cap-ai"></div></div>
 </div>
+<script src="layout.js"></script>
 <script src="renderer.js"></script>
 </body>
 </html>

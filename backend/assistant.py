@@ -172,22 +172,27 @@ class Jarvis:
         self.emit(type="transcript", role="user", text=text)
         self.emit(type="state", state="thinking")
 
-        sentences = queue.Queue()
-        speaker = threading.Thread(target=self._speaker, args=(sentences,), daemon=True)
-        speaker.start()
+        level = lambda v: self.emit(type="level", source="tts", value=v)
+
+        def tts_error(e):
+            traceback.print_exc()
+            self.emit(type="error", text=f"TTS failed: {e}")
+
+        speaker = voice.Speaker(self.tts, self.stop, level,
+                          on_start=lambda: self.emit(type="state", state="speaking"), on_error=tts_error)
 
         def on_sentence(s):
             self.emit(type="transcript", role="assistant", text=s)
-            sentences.put(s)
+            speaker.put(s)
 
         try:
             self.brain.respond(text, on_sentence, self.stop.is_set)
         except Exception as e:
             traceback.print_exc()
             self.emit(type="error", text=str(e))
-            sentences.put("Sorry, I hit a problem reaching my brain.")
+            speaker.put("Sorry, I hit a problem reaching my brain.")
         finally:
-            sentences.put(None)
+            speaker.finish()
             speaker.join()
             self.mic.muted = False
             self.mic.flush()
@@ -221,20 +226,3 @@ class Jarvis:
             self.wake.reset()
             self.busy = False
             self._idle()
-
-    def _speaker(self, sentences):
-        first = True
-        while True:
-            s = sentences.get()
-            if s is None:
-                break
-            if self.stop.is_set():
-                continue  # drain without speaking
-            if first:
-                self.emit(type="state", state="speaking")
-                first = False
-            try:
-                self.tts.speak(s, self.stop, lambda v: self.emit(type="level", source="tts", value=v))
-            except Exception as e:
-                traceback.print_exc()
-                self.emit(type="error", text=f"TTS failed: {e}")
