@@ -135,8 +135,8 @@ Wake word and speech-to-text run on your machine. Only the text of what you say 
 
 Three things on screen, nothing else:
 
-- **Jarvis core** (bottom-right of the main screen): the digital brain inside a detailed instrument ring (tick scales, rotating arc-reactor rings, radar sweep, radial audio bars, a curved name ring, and live CPU / GPU / memory arcs). It reacts to listening, thinking and speaking.
-- **Performance hub** (top-right): CPU, GPU, memory and disk gauges, a CPU+GPU load chart, memory chart, network chart and per-core bars. GPU load comes from Windows' GPU counters (any vendor).
+- **Jarvis core** (bottom-right of the main screen): the digital brain inside a detailed instrument ring (tick scales, rotating arc-reactor rings, radar sweep, radial audio bars, a curved name ring, and live CPU / memory arcs). It reacts to listening, thinking and speaking.
+- **Performance hub** (top-right): two soft rings (CPU, memory), smooth flowing load / memory / network curves and rounded per-core bars. No boxes. (GPU and disk were dropped to save CPU: reading GPU load meant running a background Windows tool.)
 - **Spotify player** (bottom-left): album art in a spinning spectrum ring, prev/play/next, progress and a live spectrum of whatever your PC plays (needs `spotify-login.bat` once).
 
 Window behaviour is per screen: when a window is open on a monitor, the panels on *that* monitor hide and the core there shrinks to a small icon. Windows on your other monitors change nothing.

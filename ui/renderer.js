@@ -128,7 +128,7 @@ function applyHome() {
 }
 // Visual quality: 0 low / 1 medium / 2 high. Sets frame rates and drawing resolution (the big CPU/GPU costs).
 let QUALITY = 1;
-const FPS_IDLE = [10, 15, 24], FPS_ACTIVE = [20, 30, 45], PERF_MS = [250, 125, 90];
+const FPS_IDLE = [6, 10, 15], FPS_ACTIVE = [15, 24, 36], PERF_MS = [500, 250, 150];
 function renderScale() {
   const dpr = window.devicePixelRatio || 1;
   return QUALITY === 0 ? Math.min(dpr, 1) * 0.75 : QUALITY === 1 ? Math.min(dpr, 1.25) : Math.min(dpr, 1.75);
@@ -279,10 +279,10 @@ function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
   // live system gauges as thin arcs inside the bars: CPU / GPU / MEM
   const sT = S.stats;
   if (sT && q > 0) {
-    const arcs = [['CPU', sT.cpu, 1.46], ['GPU', sT.gpu, 1.4], ['MEM', sT.mem, 1.34]];
+    const arcs = [['CPU', sT.cpu, 1.44], ['MEM', sT.mem, 1.36]];
     g.lineWidth = 2;
     arcs.forEach(([name, v, k], idx) => {
-      const base = -Math.PI / 2 + idx * 2.094 + 0.12, span = 2.094 - 0.24;
+      const base = -Math.PI / 2 + idx * Math.PI + 0.12, span = Math.PI - 0.24;
       g.strokeStyle = rgba(c, 0.16 * alpha); g.beginPath(); g.arc(0, 0, R * k, base, base + span); g.stroke();
       if (v != null) { g.strokeStyle = v > 90 ? `rgba(255,90,90,${alpha})` : rgba(c, 0.95 * alpha); g.beginPath(); g.arc(0, 0, R * k, base, base + span * Math.min(1, v / 100)); g.stroke(); }
     });
@@ -376,7 +376,7 @@ function frame(ms) {
   if (perfOn && ms - lastPerf > PERF_MS[QUALITY]) { lastPerf = ms; Perf.draw($('perfc'), c, renderScale(), t); }
   if (playOn) {
     const playing = !!(S.sp && S.sp.playing);
-    if (ms - lastSpec > (playing ? [100, 50, 33][QUALITY] : 500)) {
+    if (ms - lastSpec > (playing ? [100, 66, 40][QUALITY] : 1000)) {
       lastSpec = ms; updateSpectrum(t);
       Viz.radial($('pl-rad'), S.specShown, c, t, playing, renderScale());
       Viz.bars($('pl-spec'), S.specShown, c, t, renderScale());

@@ -23,7 +23,7 @@
            letter-spacing: .12em; text-transform: uppercase; transition: opacity .5s; box-sizing: border-box; padding: 4px 6px;
            text-shadow: 0 0 5px rgba(0, 6, 14, .95), 0 0 12px rgba(0, 6, 14, .8), 0 0 9px rgba(var(--c), .45); }
   .ph { font-size: 10px; letter-spacing: .28em; opacity: .75; margin: -2px 0 8px; display: flex; align-items: center; gap: 8px; }
-  .ph::before { content: ""; width: 6px; height: 6px; background: rgb(var(--c)); box-shadow: 0 0 8px rgb(var(--c)); }
+  .ph::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: rgb(var(--c)); box-shadow: 0 0 8px rgb(var(--c)); }
   .ph::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(var(--c), .5), transparent); }
   .dim .panel { opacity: .6; }
   /* a window is open on this panel's screen: tuck it away (windows on other screens don't matter) */
@@ -32,7 +32,7 @@
 
   /* performance hub */
   #perf { top: 28px; right: 28px; width: 392px; }
-  #perfc { display: block; width: 380px; height: 424px; }
+  #perfc { display: block; width: 380px; height: 396px; }
   #sysline { margin-top: 4px; opacity: .6; display: flex; justify-content: space-between; }
 
   /* spotify player */
