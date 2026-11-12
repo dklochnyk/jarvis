@@ -103,9 +103,21 @@ function busyAt(x, y) {
   const i = screenAt(x, y);
   return i < 0 ? S.anyWin : !!S.busy[i];
 }
+
+// does an open window cover (part of) a circle at this overlay position? (windows arrive as physical screen pixels)
+function coreBlocked(cx, cy, rad) {
+  if (!S.rects || !S.phys || !S.phys.win || !S.phys.win.w) return busyAt(cx, cy);
+  const w = S.phys.win, sx = CW / w.w, sy = CH / w.h;
+  for (const [l, t, r, b] of S.rects) {
+    if (r - l < 120 || b - t < 80) continue;
+    const x0 = (l - w.x) * sx, y0 = (t - w.y) * sy, x1 = (r - w.x) * sx, y1 = (b - w.y) * sy;
+    const nx = Math.max(x0, Math.min(cx, x1)), ny = Math.max(y0, Math.min(cy, y1));
+    if ((nx - cx) ** 2 + (ny - cy) ** 2 < rad * rad) return true;
+  }
+  return false;
+}
 function updateCovered() {
-  const o = orbNow;
-  $('corner').classList.toggle('covered', busyAt(o.x, o.y) && !S.pin);
+  $('corner').classList.toggle('covered', S.compact > 0.5 && eff() === 'idle' && !S.followup);   // small and quiet: no label
 }
 setInterval(updateCovered, 400);
 
@@ -156,8 +168,9 @@ let frameNo = 0;
 
 const fmtRate = (kb) => (kb >= 1024 ? (kb / 1024).toFixed(1) + 'M' : Math.round(kb) + 'K');
 
-function placeFollowers(cx, cy, R) {   // window coordinates
+function placeFollowers(cx, cy, R, scr) {   // window coordinates; scr = the screen the core is on
   const f = Layout.followers(cx, cy, R, CW, CH);
+  if (scr) { f.label.onLeft = cx + R * 3.3 + 160 > scr.x + scr.w; f.label.x = f.label.onLeft ? cx - R * 3.3 - 10 : cx + R * 3.3 + 10; }
   const cap = $('caption').style, lab = $('corner').style;
   cap.left = f.caption.left + 'px';
   cap.top = f.caption.top != null ? f.caption.top + 'px' : 'auto';
@@ -219,6 +232,7 @@ function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
   gr.addColorStop(0, rgba(c, 0.28 * alpha)); gr.addColorStop(0.4, rgba(c, 0.09 * alpha)); gr.addColorStop(1, rgba(c, 0));
   g.fillStyle = gr; g.beginPath(); g.arc(0, 0, R * 3.2 * pulse, 0, 7); g.fill();
 
+  g.globalAlpha = 1 - 0.92 * cm;   // the rigid instrument layer fades out when the core is small; the free-form waves stay
   // outer instrument rings: coarse ticks, fine ticks (counter-rotating), dashed guide
   g.lineWidth = 1;
   g.save(); g.rotate(-t * 0.1); g.strokeStyle = rgba(c, 0.38 * alpha); g.stroke(tickPath(R * 2.55, 60, 9, 4, 5)); g.restore();
@@ -369,6 +383,39 @@ function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
     }
   }
 
+  g.globalAlpha = 1;
+  // ---- free-form layer: drifting colour clouds, wavy rings that ride the voice, and flowing tendrils ----
+  {
+    const TAU = 6.2832, fw = 0.55 + 0.45 * cm;
+    for (let i = 0; i < 3; i++) {
+      const a = t * (0.25 + i * 0.08) + i * 2.1, bx = Math.cos(a) * R * 0.75, by = Math.sin(a * 1.2) * R * 0.75, col = [c, GOLD, VIOLET][i];
+      const bg = g.createRadialGradient(bx, by, 0, bx, by, R * 1.5); bg.addColorStop(0, rgba(col, 0.2 * alpha)); bg.addColorStop(1, rgba(col, 0));
+      g.fillStyle = bg; g.beginPath(); g.arc(bx, by, R * 1.5, 0, TAU); g.fill();
+    }
+    const P = q > 0 ? 120 : 64, amp = 1 + lv * 3.2;
+    const rings = [[1.32, c, 0.7, 5, 0.9], [1.58, GOLD, 0.55, 7, -0.7], [1.86, VIOLET, 0.6, 4, 0.55], [2.12, ROSE, 0.5, 9, -0.45], [2.42, c, 0.4, 6, 0.3], [2.7, GOLD, 0.3, 11, -0.25]];
+    g.lineWidth = 1.6; g.lineJoin = 'round';
+    rings.forEach(([k, col, a, n, sp], ri) => {
+      if (cm > 0.5 && ri > 3) return;
+      g.strokeStyle = rgba(col, a * alpha * fw); g.beginPath();
+      for (let i = 0; i <= P; i++) {
+        const th = (i / P) * TAU, rr = R * k + R * 0.05 * amp * Math.sin(n * th + t * sp * 2.4) + R * 0.03 * amp * Math.sin((n + 3) * th - t * sp * 1.7 + ri);
+        i ? g.lineTo(Math.cos(th) * rr, Math.sin(th) * rr) : g.moveTo(Math.cos(th) * rr, Math.sin(th) * rr);
+      }
+      g.stroke();
+    });
+    // tendrils drifting outward
+    g.lineWidth = 1.2; g.strokeStyle = rgba(c, 0.3 * alpha * fw); g.beginPath();
+    const nt = q > 0 ? 18 : 10;
+    for (let i = 0; i < nt; i++) {
+      const a = (i / nt) * TAU + t * 0.05, w = Math.sin(t * 1.3 + i * 1.7), r1 = R * 1.15, r2 = R * (1.7 + 0.1 * Math.sin(t + i)), r3 = R * (2.35 + lv * 0.7 + 0.12 * w);
+      const px = (rr, off) => [Math.cos(a) * rr - Math.sin(a) * off, Math.sin(a) * rr + Math.cos(a) * off];
+      const p0 = px(r1, 0), pm = px(r2, w * R * 0.3), p3 = px(r3, -w * R * 0.22);
+      g.moveTo(p0[0], p0[1]); g.quadraticCurveTo(pm[0], pm[1], p3[0], p3[1]);
+    }
+    g.stroke();
+  }
+
   // the digital brain at the heart of it
   gr = g.createRadialGradient(0, 0, 0, 0, 0, R * 0.85);
   gr.addColorStop(0, rgba(c, 0.30 * alpha + lv * 0.2)); gr.addColorStop(1, rgba(c, 0));
@@ -413,12 +460,16 @@ function frame(ms) {
     const mg = Math.min(o0.R * 2, CW / 2, CH / 2);
     cx = Layout.clamp(S.pin.x * CW, mg, CW - mg); cy = Layout.clamp(S.pin.y * CH, mg, CH - mg);
   }
-  S.compact += ((busyAt(cx, cy) ? 1 : 0) - S.compact) * 0.12;
+  // go small, into the corner of its own screen, only when a window would actually cover the full-size core
+  const fullR = o0.R * uiScale('orb') * 3;
+  S.compact += ((coreBlocked(cx, cy, fullR) ? 1 : 0) - S.compact) * 0.1;
   const cm = S.compact * S.compact * (3 - 2 * S.compact);
-  const R = (o0.R + (22 + 8 * k - o0.R) * cm) * uiScale('orb');
+  const sIdx = screenAt(cx, cy), sc0 = sIdx >= 0 ? S.screens[sIdx] : { x: HX, y: HY, w: W, h: H };
+  const R = (o0.R + (32 + 10 * k - o0.R) * cm) * uiScale('orb');
+  cx += (sc0.x + sc0.w - 95 - cx) * cm; cy += (sc0.y + sc0.h - 125 - cy) * cm;
   orbNow.x = cx; orbNow.y = cy; orbNow.R = R;
   cv.style.left = (cx - canvasSide / 2) + 'px'; cv.style.top = (cy - canvasSide / 2) + 'px';
-  placeFollowers(cx, cy, R);
+  placeFollowers(cx, cy, R, sc0);
 
   const speed = st === 'thinking' ? 3.2 : st === 'listening' ? 1.2 : 0.55;
   const alpha = 0.6 + 0.4 * Math.max(k, st === 'loading' ? 0.6 : 0);

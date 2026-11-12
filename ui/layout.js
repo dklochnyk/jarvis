@@ -18,7 +18,8 @@
   // Where the orb lives. c = 0 (no windows) .. 1 (windows open); k = 0 idle .. 1 active.
   // pin = {x, y} as screen fractions when the user has dragged it somewhere (then it never drifts).
   const orb = (W, H, c, k, pin) => {
-    const big = { x: W - 190, y: H - 230, R: 66 + 18 * k };   // the core lives in the bottom-right corner
+    const bR = 66 + 18 * k, bm = bR * 3.1 + 14;
+    const big = { x: W - bm, y: H - bm, R: bR };   // the core lives in the bottom-right corner
     const small = { x: W - 80, y: H - 120, R: 22 + 8 * k };
     const R = big.R + (small.R - big.R) * c;
     let x = big.x + (small.x - big.x) * c, y = big.y + (small.y - big.y) * c;
@@ -34,9 +35,9 @@
   const followers = (cx, cy, R, W, H, capW = 380) => {
     const above = cy > H * 0.4;
     const left = clamp(cx - capW / 2, 12, Math.max(12, W - capW - 12));
-    const caption = above ? { left, bottom: H - (cy - R * 2.7 - 8) } : { left, top: cy + R * 2.7 + 8 };
+    const caption = above ? { left, bottom: H - (cy - R * 3.3 - 8) } : { left, top: cy + R * 3.3 + 8 };
     const onLeft = cx > W / 2;
-    const label = { x: onLeft ? cx - R * 2.7 - 8 : cx + R * 2.7 + 8, y: cy, onLeft };
+    const label = { x: onLeft ? cx - R * 3.3 - 10 : cx + R * 3.3 + 10, y: cy, onLeft };
     return { caption, label, above };
   };
 
