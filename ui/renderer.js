@@ -217,10 +217,20 @@ function circuitPath(R) {
   }
   return (pathCache[key] = p);
 }
-const GOLD = [255, 190, 80], VIOLET = [190, 125, 255], ROSE = [255, 105, 170];
+const GOLD = [255, 190, 80], VIOLET = [190, 125, 255], ROSE = [255, 105, 170];   // accent colours: recoloured every frame so they cycle through the whole spectrum
+function hsl(h, s, l, out) {
+  h = ((h % 360) + 360) % 360 / 360;
+  const f = (n) => { const k = (n + h * 12) % 12, a = s * Math.min(l, 1 - l); return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))); };
+  out[0] = f(0); out[1] = f(8); out[2] = f(4);
+}
+function cycleAccents(t) {
+  const h = t * 28;   // a full lap about every 13 seconds
+  hsl(h, 1, 0.62, GOLD); hsl(h + 120, 1, 0.66, VIOLET); hsl(h + 240, 1, 0.64, ROSE);
+}
 const RING_TEXT = 'J.A.R.V.I.S.  ·  AI CORE  ·  ';
 
 function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
+  cycleAccents(t);
   const g = ctx, sc = canvasSc, mid = canvasSide / 2;
   g.setTransform(sc, 0, 0, sc, 0, 0);
   g.clearRect(0, 0, canvasSide, canvasSide);
@@ -233,16 +243,13 @@ function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
   g.fillStyle = gr; g.beginPath(); g.arc(0, 0, R * 3.2 * pulse, 0, 7); g.fill();
 
   g.globalAlpha = 1 - 0.92 * cm;   // the rigid instrument layer fades out when the core is small; the free-form waves stay
-  // bold glowing border: double rim ring plus corner brackets framing the whole core
+  // bold glowing border: double rim ring
   if (cm < 0.9) {
     g.shadowColor = rgba(c, 1); g.shadowBlur = 16; g.strokeStyle = rgba(c, alpha); g.lineWidth = 4;
     g.beginPath(); g.arc(0, 0, R * 3.05, 0, 6.2832); g.stroke();
     g.shadowBlur = 8; g.lineWidth = 1.6; g.strokeStyle = rgba(GOLD, 0.95 * alpha);
     g.beginPath(); g.arc(0, 0, R * 3.14, 0, 6.2832); g.stroke();
-    g.shadowBlur = 12; g.lineWidth = 4; g.strokeStyle = rgba(c, alpha); g.beginPath();
-    const bk = R * 3.38, bl = R * 0.55;
-    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { g.moveTo(sx * bk, sy * (bk - bl)); g.lineTo(sx * bk, sy * bk); g.lineTo(sx * (bk - bl), sy * bk); }
-    g.stroke(); g.shadowBlur = 0;
+    g.shadowBlur = 0;
   }
   // outer instrument rings: coarse ticks, fine ticks (counter-rotating), dashed guide
   g.lineWidth = 1;
@@ -384,12 +391,12 @@ function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
     const rp = (t / 3.2) % 1; g.strokeStyle = rgba(c, 0.35 * (1 - rp) * fa); g.lineWidth = 1.5; g.beginPath(); g.arc(0, 0, R * (1.2 + rp * 1.7), 0, TAU); g.stroke();
     // data chips around the rim
     if (q > 0) {
-      const sT2 = S.stats, d = new Date(), pad = (n) => String(n).padStart(2, '0');
+      const sT2 = S.stats, d = new Date(), pad = (n) => String(n).padStart(2, '0'), h12 = d.getHours() % 12 || 12;
       const chips = [[-2.356, 'CPU ' + (sT2 ? Math.round(sT2.cpu) + '%' : '--')], [-0.785, 'MEM ' + (sT2 ? Math.round(sT2.mem) + '%' : '--')],
-        [2.356, 'NET ' + (sT2 ? fmtRate(sT2.net_down || 0) : '--')], [0.785, pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds())]];
-      g.font = `bold ${Math.max(8, R * 0.14)}px Consolas, monospace`; g.textAlign = 'center'; g.shadowColor = 'rgba(0,0,0,.8)'; g.shadowBlur = 2;
+        [2.356, 'NET ' + (sT2 ? fmtRate(sT2.net_down || 0) : '--')], [0.785, h12 + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()) + (d.getHours() < 12 ? ' AM' : ' PM')]];
+      g.font = `bold ${Math.max(11, R * 0.21)}px Consolas, monospace`; g.textAlign = 'center'; g.shadowColor = 'rgba(0,0,0,.8)'; g.shadowBlur = 2;
       for (const [a, s] of chips) {
-        const x = Math.cos(a) * R * 2.62, y = Math.sin(a) * R * 2.62;
+        const x = Math.cos(a) * R * 2.5, y = Math.sin(a) * R * 2.5;
         g.fillStyle = rgba(GOLD, fa); g.fillText(s, x, y + 3);
       }
       g.shadowBlur = 0;
