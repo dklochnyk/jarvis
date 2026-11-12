@@ -23,6 +23,7 @@ class Jarvis:
         self.busy = False
         self.restart_requested = False
         self.ptt_held = threading.Event()       # left mouse button held on the visualizer
+        self.mic_hops = 0                       # how many other microphones we have tried automatically
         self.mic_warned = 0.0                   # last time we warned about a dead microphone
         self.silent_for = 0.0
         self.ptt_down_at = 0.0
@@ -125,8 +126,8 @@ class Jarvis:
         self.load()
         try:
             self.mic.start()
-            self.emit(type="log", text=f"Microphone: {self.mic.name()}")
-            print(f"Microphone: {self.mic.name()}")
+            self.emit(type="log", text=f"Microphone: {self.mic.describe()}")
+            print(f"Microphone: {self.mic.describe()}")
         except Exception as e:
             msg = f"Could not open the microphone ({e}). Run list-mics.bat and set mic_device in settings.yaml. You can still type to Jarvis (Ctrl+Alt+T)."
             print(msg); self.emit(type="error", text=msg)
@@ -168,6 +169,17 @@ class Jarvis:
         frame = self.mic.get(0.1)
         now = time.time()
         if frame is None:
+            if not self.mic.muted and now - self.mic.last_cb > 4 and self.mic_hops < 10:
+                # this input gives us nothing at all: automatically try the next microphone
+                self.mic_hops += 1
+                bad = self.mic.describe()
+                new = self.mic.rotate()
+                self.mic.last_cb = time.time()
+                msg = f"No audio from {bad}" + (f" - trying {new}" if new else " - and no other microphone could be opened.")
+                if self.mic.cb_error:
+                    msg += f" (audio callback error: {self.mic.cb_error})"
+                print(msg); self.emit(type="log", text=msg)
+                return
             if not self.mic.muted and now - self.mic.last_cb > 4 and now - self.mic_warned > 30:
                 self.mic_warned = now
                 msg = "No audio is coming from the microphone. Check it is plugged in and not muted, that Windows allows desktop apps to use it (Settings > Privacy > Microphone), or pick another with list-mics.bat. You can type to Jarvis with Ctrl+Alt+T."
@@ -176,6 +188,13 @@ class Jarvis:
         r = voice.rms(frame)
         # pure digital silence for a long time = muted or blocked microphone
         self.silent_for = self.silent_for + 0.08 if r == 0.0 else 0.0
+        if self.silent_for > 6 and self.mic_hops < 10:
+            # pure digital silence: this input is muted or is the wrong device, so try the next one
+            self.mic_hops += 1; self.silent_for = 0.0
+            bad = self.mic.describe(); new = self.mic.rotate()
+            msg = f"{bad} is sending pure silence" + (f" - trying {new}" if new else " - and no other microphone could be opened.")
+            print(msg); self.emit(type="log", text=msg)
+            return
         if self.silent_for > 10 and now - self.mic_warned > 60:
             self.mic_warned = now
             msg = "The microphone is sending pure silence: it looks muted or blocked by Windows privacy settings. You can type to Jarvis with Ctrl+Alt+T."

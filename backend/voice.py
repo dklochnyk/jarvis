@@ -36,6 +36,7 @@ class Mic:
         self.muted = False
         self.stream = None
         self.sr, self.ch = SAMPLE_RATE, 1
+        self.cb_error = None
         self.last_cb = time.time()
 
     def name(self):
@@ -44,11 +45,11 @@ class Mic:
         except Exception as e:
             return f"unknown ({e})"
 
-    def _formats(self):
-        """Formats to try, best first: what we want (16 kHz mono), then whatever the device itself supports."""
+    def _formats(self, device):
+        """Formats to try for a device, best first: 16 kHz mono, then whatever the device itself supports."""
         out = [(SAMPLE_RATE, 1)]
         try:
-            info = sd.query_devices(self.device, "input")
+            info = sd.query_devices(device, "input")
             dsr = int(info.get("default_samplerate") or 0)
             maxch = int(info.get("max_input_channels") or 1)
         except Exception:
@@ -60,27 +61,53 @@ class Mic:
                     out.append((r, ch))
         return out
 
+    def _open(self, device, sr, ch):
+        bs = FRAME if sr == SAMPLE_RATE else max(1, int(round(FRAME * sr / SAMPLE_RATE)))
+        self.stream = sd.InputStream(samplerate=sr, channels=ch, dtype="int16", blocksize=bs, callback=self._cb, device=device)
+        self.stream.start()
+        self.device, self.sr, self.ch = device, sr, ch
+        self.last_cb = time.time()
+        self.flush()
+
+    def _close(self):
+        try:
+            if self.stream:
+                self.stream.stop(); self.stream.close()
+        except Exception:
+            pass
+        self.stream = None
+
     def start(self):
         last = None
-        for sr, ch in self._formats():
-            self.sr, self.ch = sr, ch
-            bs = FRAME if sr == SAMPLE_RATE else max(1, int(round(FRAME * sr / SAMPLE_RATE)))
+        for sr, ch in self._formats(self.device):
             try:
-                self.stream = sd.InputStream(
-                    samplerate=sr, channels=ch, dtype="int16", blocksize=bs,
-                    callback=self._cb, device=self.device,
-                )
-                self.stream.start()
+                self._open(self.device, sr, ch)
                 return
             except Exception as e:   # this microphone can't do that format: try the next one
                 last = e
-                try:
-                    if self.stream:
-                        self.stream.close()
-                except Exception:
-                    pass
-                self.stream = None
+                self._close()
         raise last
+
+    def describe(self):
+        return f"{self.name()} ({self.sr // 1000 if self.sr % 1000 == 0 else self.sr / 1000} kHz, {'stereo' if self.ch == 2 else 'mono'})"
+
+    def rotate(self):
+        """The current microphone delivers nothing: move on to the next input device that opens. Returns a description or None."""
+        self._close()
+        try:
+            devs = [i for i, d in enumerate(sd.query_devices()) if d["max_input_channels"] > 0]
+        except Exception:
+            devs = []
+        cur = self.device if isinstance(self.device, int) else (sd.default.device[0] if sd.default.device[0] is not None else -1)
+        order = [d for d in devs if d > cur] + [d for d in devs if d <= cur]
+        for d in order:
+            for sr, ch in self._formats(d):
+                try:
+                    self._open(d, sr, ch)
+                    return self.describe()
+                except Exception:
+                    self._close()
+        return None
 
     def _to_16k(self, indata):
         x = indata[:, 0] if indata.shape[1] == 1 else indata.astype(np.int32).mean(axis=1)
@@ -103,6 +130,8 @@ class Mic:
             self.q.put_nowait(self._to_16k(indata))
         except queue.Full:
             pass
+        except Exception as e:   # never let an exception kill the stream
+            self.cb_error = str(e)
 
     def get(self, timeout=0.1):
         try:
