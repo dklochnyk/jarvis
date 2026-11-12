@@ -47,7 +47,7 @@
     }
     ctx.stroke(); ctx.restore();
     // inner segmented ring (spins while playing)
-    ctx.save(); ctx.rotate(spin * 0.5); ctx.lineWidth = 3; ctx.lineCap = 'butt'; ctx.strokeStyle = rgba(c, 0.85); ctx.beginPath();
+    ctx.save(); ctx.rotate(spin * 0.5); ctx.lineWidth = 3; ctx.lineCap = 'butt'; ctx.strokeStyle = 'rgba(190,125,255,0.9)'; ctx.beginPath();
     for (let s = 0; s < 4; s++) { const a0 = (s / 4) * TAU; ctx.moveTo(Math.cos(a0) * (r0 - 6), Math.sin(a0) * (r0 - 6)); ctx.arc(0, 0, r0 - 6, a0, a0 + TAU / 4 * 0.6); }
     ctx.stroke(); ctx.restore();
     ctx.strokeStyle = rgba(c, 0.3); ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(0, 0, r0 - 12, 0, TAU); ctx.stroke();
@@ -56,7 +56,7 @@
     for (let i = 0; i < M; i++) { const f = i / M, k = Math.min(39, Math.floor((f < 0.5 ? f * 2 : (1 - f) * 2) * 39)), a = f * TAU - Math.PI / 2, rr = rw + Math.max(0, Math.min(1, arr[k])) * 5; pt.push([Math.cos(a) * rr, Math.sin(a) * rr]); }
     ctx.beginPath(); ctx.moveTo((pt[M - 1][0] + pt[0][0]) / 2, (pt[M - 1][1] + pt[0][1]) / 2);
     for (let i = 0; i < M; i++) { const p = pt[i], q = pt[(i + 1) % M]; ctx.quadraticCurveTo(p[0], p[1], (p[0] + q[0]) / 2, (p[1] + q[1]) / 2); }
-    ctx.closePath(); ctx.strokeStyle = rgba(c, 0.55); ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.closePath(); ctx.strokeStyle = 'rgba(255,190,80,0.75)'; ctx.lineWidth = 1.4; ctx.stroke();
     // orbiting dots (speed follows the music)
     ctx.fillStyle = '#fff';
     for (let i = 0; i < 3; i++) { const a = spin * (0.7 + bass * 1.5) + i * 2.094; ctx.beginPath(); ctx.arc(Math.cos(a) * (W * 0.485), Math.sin(a) * (W * 0.485), 1.8 + bass * 1.5, 0, TAU); ctx.fill(); }
@@ -69,7 +69,7 @@
     ctx.strokeStyle = rgba(c, 0.1); ctx.lineWidth = 1; ctx.beginPath();
     for (let i = 1; i <= 3; i++) { const y = base - (maxH * i) / 3; ctx.moveTo(0, y); ctx.lineTo(W, y); }
     ctx.stroke();
-    const grad = ctx.createLinearGradient(0, base - maxH, 0, base); grad.addColorStop(0, rgba(c, 1)); grad.addColorStop(1, rgba(c, 0.3));
+    const grad = ctx.createLinearGradient(0, base - maxH, 0, base); grad.addColorStop(0, 'rgba(255,120,200,1)'); grad.addColorStop(0.55, rgba(c, 1)); grad.addColorStop(1, rgba(c, 0.3));
     ctx.fillStyle = grad;
     for (let i = 0; i < n; i++) {
       const v = Math.max(0, Math.min(1, arr[i])), h = 2 + v * maxH;
@@ -81,7 +81,7 @@
     ctx.fillStyle = rgba(c, 0.16);
     for (let i = 0; i < n; i++) { const v = Math.max(0, Math.min(1, arr[i])); ctx.fillRect(i * bw + 1.5, base + 3, bw - 3, Math.min(H - base - 3, (2 + v * maxH) * 0.4)); }
     // smooth glowing contour over the bars
-    ctx.strokeStyle = rgba(c, 0.85); ctx.lineWidth = 1.5; ctx.lineJoin = 'round'; ctx.beginPath();
+    ctx.strokeStyle = 'rgba(255,190,80,0.9)'; ctx.lineWidth = 1.5; ctx.lineJoin = 'round'; ctx.beginPath();
     for (let i = 0; i < n; i++) {
       const px = i * bw + bw / 2, py = base - 2 - Math.max(0, Math.min(1, arr[i])) * maxH * 1.08;
       if (i === 0) ctx.moveTo(px, py); else { const qx = (i - 1) * bw + bw / 2, qy = base - 2 - Math.max(0, Math.min(1, arr[i - 1])) * maxH * 1.08; ctx.quadraticCurveTo(qx, qy, (px + qx) / 2, (py + qy) / 2); }

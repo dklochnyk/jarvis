@@ -21,7 +21,8 @@
     ctx.beginPath(); ctx.moveTo(P[0][0], P[0][1]);
     for (let i = 1; i < P.length - 1; i++) ctx.quadraticCurveTo(P[i][0], P[i][1], (P[i][0] + P[i + 1][0]) / 2, (P[i][1] + P[i + 1][1]) / 2);
     const L = P[P.length - 1]; ctx.lineTo(L[0], L[1]);
-    ctx.strokeStyle = rgba(c, alpha); ctx.lineWidth = 1.8; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+    ctx.shadowColor = rgba(c, 0.7); ctx.shadowBlur = 6;
+    ctx.strokeStyle = rgba(c, alpha); ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke(); ctx.shadowBlur = 0;
     if (fill) {
       ctx.lineTo(L[0], y + h); ctx.lineTo(P[0][0], y + h); ctx.closePath();
       const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, rgba(c, 0.28)); g.addColorStop(1, rgba(c, 0));
@@ -32,34 +33,43 @@
       ctx.strokeStyle = rgba(c, 0.5); ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(L[0], L[1], 5 + Math.sin(t * 4), 0, TAU); ctx.stroke();
     }
   }
-  // one free-flowing section: small title, big number, then the wave. No frames.
-  function section(ctx, title, big, small, x, w, series, max, c, t) {
-    ctx.shadowColor = 'rgba(0,6,14,.9)'; ctx.shadowBlur = 6;   // keeps the text readable over bright windows
-    ctx.textAlign = 'left'; ctx.font = '9px Consolas, monospace'; ctx.fillStyle = rgba(c, 0.8); ctx.fillText(title, x, 11);
-    ctx.fillStyle = '#eaffff'; ctx.font = '300 20px "Segoe UI", sans-serif'; ctx.fillText(big, x, 33);
-    ctx.textAlign = 'right'; ctx.font = '9px Consolas, monospace'; ctx.fillStyle = rgba(c, 0.6); ctx.fillText(small, x + w, 11); ctx.shadowBlur = 0;
-    series.forEach((s, i) => flow(ctx, s.data, x, 40, w, 46, max, c, s.alpha, s.fill, t, i === series.length - 1 && s.head));
-  }
+  // accent colours so each readout has its own hue (they still shift a little with Jarvis' state)
+  const mix = (c, k, w) => [c[0] + (k[0] - c[0]) * w, c[1] + (k[1] - c[1]) * w, c[2] + (k[2] - c[2]) * w];
+  const KIND = {
+    cpu: { title: 'CPU · 60 S', col: (c) => c, max: () => 100 },
+    mem: { title: 'MEMORY', col: (c) => mix(c, [200, 130, 255], 0.75), max: () => 100 },
+    net: { title: 'NETWORK', col: (c) => mix(c, [90, 255, 170], 0.8), max: () => Math.max(50, ...H.down, ...H.up) },
+  };
 
-  function draw(cv, c, sc, t) {
+  // each readout is its own free-floating canvas: title, big number, then a wave that fades in and out at both ends
+  function draw(kind, cv, c0, sc, t) {
     if (!last) return;
+    const K = KIND[kind], c = K.col(c0), m = last;
     const ctx = cv.getContext('2d'), W = cv.clientWidth, Hh = cv.clientHeight;
     if (cv.width !== Math.round(W * sc) || cv.height !== Math.round(Hh * sc)) { cv.width = Math.round(W * sc); cv.height = Math.round(Hh * sc); }
     ctx.setTransform(sc, 0, 0, sc, 0, 0); ctx.clearRect(0, 0, W, Hh);
-    const m = last, gap = 36, usable = W - gap * 3, w1 = usable * 0.3, w2 = usable * 0.22, w3 = usable * 0.3, w4 = usable * 0.18;
-    const x1 = 0, x2 = x1 + w1 + gap, x3 = x2 + w2 + gap, x4 = x3 + w3 + gap;
-    section(ctx, 'CPU · 60 S', Math.round(m.cpu) + '%', m.cores.length + ' CORES', x1, w1, [{ data: H.cpu, alpha: 0.95, fill: true, head: true }], 100, c, t);
-    section(ctx, 'MEMORY', Math.round(m.mem) + '%', m.mem_used + ' / ' + Math.round(m.mem_total) + ' GB', x2, w2, [{ data: H.mem, alpha: 0.9, fill: true, head: true }], 100, c, t);
-    const nmax = Math.max(50, ...H.down, ...H.up);
-    section(ctx, 'NETWORK', '▼ ' + fmtRate(m.net_down), '▲ ' + fmtRate(m.net_up), x3, w3, [{ data: H.up, alpha: 0.4, fill: false }, { data: H.down, alpha: 0.95, fill: true, head: true }], nmax, c, t);
-    // cores: rounded pills
-    ctx.textAlign = 'left'; ctx.font = '9px Consolas, monospace'; ctx.fillStyle = rgba(c, 0.8); ctx.fillText('CORES', x4, 11);
-    const n = m.cores.length, cg = 4, bw = Math.max(3, (w4 - cg * (n - 1)) / n);
-    for (let i = 0; i < n; i++) {
-      const v = m.cores[i], h = 4 + (v / 100) * 38, x = x4 + i * (bw + cg);
-      ctx.fillStyle = rgba(c, 0.1); ctx.beginPath(); ctx.roundRect(x, 44, bw, 42, bw / 2); ctx.fill();
-      ctx.fillStyle = hot(v, c, 0.85); ctx.beginPath(); ctx.roundRect(x, 86 - h, bw, h, bw / 2); ctx.fill();
-    }
+    const wy = 44, wh = 48;
+    let big, small, series;
+    if (kind === 'cpu') { big = Math.round(m.cpu) + '%'; small = m.cores.length + ' CORES'; series = [{ data: H.cpu, a: 0.95, fill: true, head: true }]; }
+    else if (kind === 'mem') { big = Math.round(m.mem) + '%'; small = m.mem_used + ' / ' + Math.round(m.mem_total) + ' GB'; series = [{ data: H.mem, a: 0.9, fill: true, head: true }]; }
+    else { big = '▼ ' + fmtRate(m.net_down); small = '▲ ' + fmtRate(m.net_up); series = [{ data: H.up, a: 0.45, fill: false }, { data: H.down, a: 0.95, fill: true, head: true }]; }
+    const max = K.max();
+    series.forEach((s) => flow(ctx, s.data, 0, wy, W, wh, max, c, s.a, s.fill, t, false));
+    // soften both ends of the wave so it has no hard start or finish
+    ctx.save(); ctx.globalCompositeOperation = 'destination-in';
+    const g = ctx.createLinearGradient(0, 0, W, 0); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.35, 'rgba(0,0,0,1)'); g.addColorStop(0.9, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0.15)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, Hh); ctx.restore();
+    // glowing head just inside the right edge
+    const lead = series[series.length - 1].data, hx = W * 0.97, hy = wy + wh - Math.min(1, lead[lead.length - 1] / max) * wh;
+    const hg = ctx.createRadialGradient(hx, hy, 0, hx, hy, 12); hg.addColorStop(0, rgba(c, 0.8)); hg.addColorStop(1, rgba(c, 0));
+    ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(hx, hy, 12, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(hx, hy, 2.2, 0, TAU); ctx.fill();
+    // text on top (with a soft dark halo so it reads over bright windows)
+    ctx.shadowColor = 'rgba(0,6,14,.9)'; ctx.shadowBlur = 6;
+    ctx.textAlign = 'left'; ctx.font = '9px Consolas, monospace'; ctx.fillStyle = rgba(c, 0.9); ctx.fillText(K.title, 4, 11);
+    ctx.fillStyle = '#f2ffff'; ctx.font = '300 20px "Segoe UI", sans-serif'; ctx.fillText(big, 4, 34);
+    ctx.textAlign = 'right'; ctx.font = '9px Consolas, monospace'; ctx.fillStyle = rgba(c, 0.7); ctx.fillText(small, W - 4, 11);
+    ctx.shadowBlur = 0;
   }
 
   function text(dom) {

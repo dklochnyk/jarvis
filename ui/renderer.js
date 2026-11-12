@@ -105,7 +105,7 @@ function busyAt(x, y) {
   const i = screenAt(x, y);
   return i < 0 ? S.anyWin : !!S.busy[i];
 }
-const PANELS = ['perf', 'player'];
+const PANELS = ['perf-cpu', 'perf-mem', 'perf-net', 'player'];
 function updateCovered() {
   for (const id of PANELS) {
     const el = $(id), r = el.getBoundingClientRect();
@@ -227,6 +227,7 @@ function tickPath(r, n, long, short, every) {
   const keys = Object.keys(pathCache); if (keys.length > 40) delete pathCache[keys[0]];
   return (pathCache[key] = p);
 }
+const GOLD = [255, 190, 80], VIOLET = [190, 125, 255], ROSE = [255, 105, 170];
 const RING_TEXT = 'J.A.R.V.I.S.  ·  AI CORE  ·  ';
 
 function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
@@ -284,21 +285,41 @@ function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
     arcs.forEach(([name, v, k], idx) => {
       const base = -Math.PI / 2 + idx * Math.PI + 0.12, span = Math.PI - 0.24;
       g.strokeStyle = rgba(c, 0.16 * alpha); g.beginPath(); g.arc(0, 0, R * k, base, base + span); g.stroke();
-      if (v != null) { g.strokeStyle = v > 90 ? `rgba(255,90,90,${alpha})` : rgba(c, 0.95 * alpha); g.beginPath(); g.arc(0, 0, R * k, base, base + span * Math.min(1, v / 100)); g.stroke(); }
+      if (v != null) { g.strokeStyle = v > 90 ? `rgba(255,90,90,${alpha})` : rgba(idx ? VIOLET : c, 0.95 * alpha); g.beginPath(); g.arc(0, 0, R * k, base, base + span * Math.min(1, v / 100)); g.stroke(); }
     });
   }
 
-  // arc-reactor rings
-  g.lineWidth = 2;
-  for (const [rr, segs, frac, dir] of [[R * 1.25, 3, 0.7, 1], [R * 1.05, 5, 0.55, -1.4], [R * 0.9, 2, 0.8, 2.1]]) {
+  // arc-reactor rings, each in its own colour
+  g.lineWidth = 2.2;
+  [[R * 1.25, 3, 0.7, 1, c], [R * 1.05, 5, 0.55, -1.4, GOLD], [R * 0.9, 2, 0.8, 2.1, VIOLET]].forEach(([rr, segs, frac, dir, col]) => {
     const base = t * speed * dir, span = (6.2832 / segs) * frac * 0.8;
-    g.strokeStyle = rgba(c, 0.85 * alpha); g.beginPath();
+    g.strokeStyle = rgba(col, 0.9 * alpha); g.beginPath();
     for (let s = 0; s < segs; s++) { const a0 = base + (s / segs) * 6.2832; g.moveTo(Math.cos(a0) * rr, Math.sin(a0) * rr); g.arc(0, 0, rr, a0, a0 + span); }
     g.stroke();
+  });
+
+  // segmented power ring (gold) that fills with Jarvis' voice level / activity, plus a rose scale of fine dashes
+  if (q > 0) {
+    const SEG = 36, lit = Math.round(Math.min(1, 0.12 + lv * 1.4 + (st === 'thinking' ? 0.4 : 0)) * SEG), rr = R * 1.88, step = 6.2832 / SEG;
+    g.lineWidth = 4; g.strokeStyle = rgba(GOLD, 0.14 * alpha); g.beginPath();
+    for (let i = lit; i < SEG; i++) { const a0 = -1.5708 + i * step; g.moveTo(Math.cos(a0 + 0.03) * rr, Math.sin(a0 + 0.03) * rr); g.arc(0, 0, rr, a0 + 0.03, a0 + step - 0.03); }
+    g.stroke();
+    g.strokeStyle = rgba(GOLD, 0.9 * alpha); g.beginPath();
+    for (let i = 0; i < lit; i++) { const a0 = -1.5708 + i * step; g.moveTo(Math.cos(a0 + 0.03) * rr, Math.sin(a0 + 0.03) * rr); g.arc(0, 0, rr, a0 + 0.03, a0 + step - 0.03); }
+    g.stroke();
+    g.save(); g.rotate(t * 0.15); g.strokeStyle = rgba(ROSE, 0.45 * alpha); g.lineWidth = 1; g.stroke(tickPath(R * 2.0, 90, 5, 2.5, 9)); g.restore();
+    // satellite with a fading trail on the dashed guide
+    const sa = t * 0.7;
+    for (let i = 0; i < 8; i++) { g.fillStyle = rgba(VIOLET, (0.9 - i * 0.11) * alpha); g.beginPath(); g.arc(Math.cos(sa - i * 0.07) * R * 2.22, Math.sin(sa - i * 0.07) * R * 2.22, 3.2 - i * 0.28, 0, 7); g.fill(); }
+    // degree labels at the four compass points
+    if (cm < 0.6) {
+      g.font = `${Math.max(7, R * 0.14)}px Consolas, monospace`; g.textAlign = 'center'; g.fillStyle = rgba(c, 0.55 * alpha * (1 - cm));
+      [['000', 0, -2.3], ['090', 2.3, 0.05], ['180', 0, 2.38], ['270', -2.3, 0.05]].forEach(([s, kx, ky]) => g.fillText(s, kx * R, ky * R + 3));
+    }
   }
 
   // hexagon frame + radar sweep around the brain
-  g.save(); g.rotate(t * 0.12); g.strokeStyle = rgba(c, 0.45 * alpha); g.lineWidth = 1; g.beginPath();
+  g.save(); g.rotate(t * 0.12); g.strokeStyle = rgba(ROSE, 0.5 * alpha); g.lineWidth = 1.2; g.beginPath();
   for (let i = 0; i <= 6; i++) { const a = (i / 6) * 6.2832, x = Math.cos(a) * R * 0.98, y = Math.sin(a) * R * 0.98; i ? g.lineTo(x, y) : g.moveTo(x, y); }
   g.stroke(); g.restore();
   if (q > 0 && g.createConicGradient) {
@@ -372,8 +393,11 @@ function frame(ms) {
   drawCore(R, t, dt, st, lv, c, alpha, cm, speed);
 
   // panels: redrawn on their own slower clock, and only while visible
-  const perfOn = !$('perf').classList.contains('covered'), playOn = !$('player').classList.contains('covered');
-  if (perfOn && ms - lastPerf > PERF_MS[QUALITY]) { lastPerf = ms; Perf.draw($('perfc'), c, renderScale(), t); }
+  const playOn = !$('player').classList.contains('covered');
+  if (ms - lastPerf > PERF_MS[QUALITY]) {
+    lastPerf = ms;
+    for (const k of ['cpu', 'mem', 'net']) if (!$('perf-' + k).classList.contains('covered')) Perf.draw(k, $('pfc-' + k), c, renderScale(), t);
+  }
   if (playOn) {
     const playing = !!(S.sp && S.sp.playing);
     if (ms - lastSpec > (playing ? [100, 66, 40][QUALITY] : 1000)) {
@@ -423,7 +447,7 @@ tin.addEventListener('blur', () => { window.jarvis.blurInput(); setInteractive(f
 window.jarvis.onFocusInput && window.jarvis.onFocusInput(() => { $('hud').classList.remove('hidden'); showTerm(60000); setTimeout(() => tin.focus(), 90); });
 
 // ---------- movable / scalable panels (right-drag to move, right-hold + scroll to resize) ----------
-const MOVABLE = ['perf', 'player', 'term'];
+const MOVABLE = ['perf-cpu', 'perf-mem', 'perf-net', 'player', 'term'];
 let UI = {};
 try { UI = JSON.parse(localStorage.getItem('jarvis.ui')) || {}; } catch (e) { UI = {}; }
 const saveUI = () => { try { localStorage.setItem('jarvis.ui', JSON.stringify(UI)); } catch (e) { /* fine */ } };

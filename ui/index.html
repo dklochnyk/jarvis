@@ -31,8 +31,10 @@
   .panel.grab { outline: 1px dashed rgba(var(--c), .6); }
 
   /* performance hub */
-  #perf { top: 14px; left: 28px; right: 28px; }
-  #perfc { display: block; width: 100%; height: 92px; }
+  #perf-cpu { top: 14px; left: 28px; width: 340px; }
+  #perf-mem { top: 14px; left: 410px; width: 280px; }
+  #perf-net { top: 14px; left: 732px; width: 340px; }
+    .pf canvas { display: block; width: 100%; height: 96px; }
   #sysline { margin-top: 0; opacity: .6; display: flex; justify-content: space-between; }
 
   /* spotify player */
@@ -94,10 +96,9 @@
 <div id="hud">
   <canvas id="c"></canvas>
   <div id="stage">
-    <div id="perf" class="panel">
-      <canvas id="perfc"></canvas>
-      <div id="sysline"><span id="up">UP --</span><span id="bat"></span></div>
-    </div>
+    <div id="perf-cpu" class="panel pf"><canvas id="pfc-cpu"></canvas></div>
+    <div id="perf-mem" class="panel pf"><canvas id="pfc-mem"></canvas><div id="sysline"><span id="up">UP --</span><span id="bat"></span></div></div>
+    <div id="perf-net" class="panel pf"><canvas id="pfc-net"></canvas></div>
 
     <div id="player" class="panel">
       <div id="pl-top">
