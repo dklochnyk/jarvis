@@ -32,7 +32,7 @@ function setPin(p) {
   try { p ? localStorage.setItem('jarvis.orbpin', JSON.stringify(p)) : localStorage.removeItem('jarvis.orbpin'); } catch (e) { /* storage unavailable: fine */ }
 }
 
-const S = { exec: false, planned: false,
+const S = { sp: null, spec: new Array(40).fill(0), specAt: 0, specShown: new Array(40).fill(0), exec: false, planned: false,
             compact: 0, state: 'loading', followup: false, level: 0, target: 0, prom: 0, hold: 0,
             color: [...COLORS.loading], t: 0, pin: loadPin(), stats: null,
             screens: [], busy: [], anyWin: false, legacyWins: [], rects: null, phys: null };
@@ -66,6 +66,8 @@ function handle(m) {
       else if (m.role === 'user') { $('cap-user').textContent = '“' + m.text + '”'; $('cap-ai').textContent = ''; }
       else { $('cap-ai').textContent += (($('cap-ai').textContent ? ' ' : '') + m.text); }
       break;
+    case 'spotify': S.sp = { playing: !!m.playing }; break;
+    case 'spectrum': S.spec = m.bands || S.spec; S.specAt = Date.now(); break;
     case 'tool': S.exec = true; break;
     case 'tool_result': S.exec = false; S.planned = true; break;
     case 'error': termLine('ERROR: ' + m.text, true); break;
@@ -168,6 +170,19 @@ let frameNo = 0;
 
 const fmtRate = (kb) => (kb >= 1024 ? (kb / 1024).toFixed(1) + 'M' : Math.round(kb) + 'K');
 
+// the PC's audio spectrum: real (loopback capture from the backend) or simulated while Spotify is playing
+function updateSpectrum(t) {
+  const live = Date.now() - S.specAt < 2500, playing = !!(S.sp && S.sp.playing);
+  const beat = Math.pow(Math.max(0, Math.sin(t * 3.9)), 3);
+  for (let i = 0; i < 40; i++) {
+    let want;
+    if (live) want = (S.spec[i] || 0) / 100;
+    else if (playing) want = 0.55 * Math.exp(-i / 24) * (0.3 + 0.7 * Math.abs(Math.sin(t * (1.6 + i * 0.17) + i * 1.3))) * (0.55 + 0.6 * beat);
+    else want = 0;
+    S.specShown[i] += (want - S.specShown[i]) * (want > S.specShown[i] ? 0.5 : 0.16);
+  }
+}
+
 function placeFollowers(cx, cy, R, scr) {   // window coordinates; scr = the screen the core is on
   const f = Layout.followers(cx, cy, R, CW, CH);
   if (scr) { f.label.onLeft = cx + R * 3.3 + 160 > scr.x + scr.w; f.label.x = f.label.onLeft ? cx - R * 3.3 - 10 : cx + R * 3.3 + 10; }
@@ -223,14 +238,21 @@ function hsl(h, s, l, out) {
   const f = (n) => { const k = (n + h * 12) % 12, a = s * Math.min(l, 1 - l); return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))); };
   out[0] = f(0); out[1] = f(8); out[2] = f(4);
 }
-function cycleAccents(t) {
-  const h = t * 28;   // a full lap about every 13 seconds
-  hsl(h, 1, 0.62, GOLD); hsl(h + 120, 1, 0.66, VIOLET); hsl(h + 240, 1, 0.64, ROSE);
+function hueOf(c) {
+  const r = c[0] / 255, g = c[1] / 255, b = c[2] / 255, mx = Math.max(r, g, b), d = mx - Math.min(r, g, b);
+  if (!d) return 190;
+  const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return h * 60;
+}
+function cycleAccents(t, c) {
+  // one accent (gold) laps the whole spectrum; the other two only drift a little either side of the main colour, so the HUD stays mostly one colour
+  const hb = hueOf(c);
+  hsl(t * 28, 1, 0.62, GOLD); hsl(hb + 38 * Math.sin(t * 0.45), 0.95, 0.72, VIOLET); hsl(hb - 38 * Math.sin(t * 0.35 + 1), 0.95, 0.76, ROSE);
 }
 const RING_TEXT = 'J.A.R.V.I.S.  ·  AI CORE  ·  ';
 
 function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
-  cycleAccents(t);
+  cycleAccents(t, c);
   const g = ctx, sc = canvasSc, mid = canvasSide / 2;
   g.setTransform(sc, 0, 0, sc, 0, 0);
   g.clearRect(0, 0, canvasSide, canvasSide);
@@ -273,18 +295,31 @@ function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
 
   // radial audio bars (one path)
   let sum = 0;
+  const speech = st === 'listening' || st === 'speaking' || pttActive;
+  let en = 0; for (let i = 0; i < 40; i++) en += S.specShown[i];
+  const music = !speech && en > 0.6;              // not listening to speech: the ring shows the sound your PC is playing
   for (let i = 0; i < NBARS; i++) {
     const wob = 0.35 + 0.65 * Math.abs(Math.sin(i * 1.7 + t * 6) * Math.cos(i * 0.6 - t * 3));
-    const want = (st === 'listening' || st === 'speaking') ? lv * wob : 0.04 + 0.03 * Math.sin(t * 2 + i);
-    bars[i] += (want - bars[i]) * 0.4; sum += bars[i];
+    const f = i / NBARS, k = Math.min(39, Math.floor((f < 0.5 ? f * 2 : (1 - f) * 2) * 39));
+    const want = speech ? lv * wob : music ? Math.min(0.88, S.specShown[k] * 1.5) : 0.04 + 0.03 * Math.sin(t * 2 + i);
+    bars[i] += (want - bars[i]) * (music ? 0.55 : 0.4); sum += bars[i];
   }
   g.strokeStyle = rgba(c, Math.min(1, 0.4 + (sum / NBARS) * 2.4) * alpha); g.lineWidth = 3.4 - 1.4 * cm; g.lineCap = 'round'; g.shadowColor = rgba(c, 0.9); g.shadowBlur = 10; g.beginPath();
-  g.save(); g.rotate(t * 0.08 * speed);
+  g.save(); g.rotate(music ? -1.5708 : t * 0.08 * speed);
   for (let i = 0; i < NBARS; i++) {
-    const a = (i / NBARS) * 6.2832, r0 = R * 1.55, r1 = r0 + 6 + bars[i] * R * 1.1, ca = Math.cos(a), sa = Math.sin(a);
+    const a = (i / NBARS) * 6.2832, r0 = R * 1.55, r1 = r0 + 6 + bars[i] * R * (music ? 1.5 : 1.1), ca = Math.cos(a), sa = Math.sin(a);
     g.moveTo(ca * r0, sa * r0); g.lineTo(ca * r1, sa * r1);
   }
-  g.stroke(); g.restore(); g.lineCap = 'butt'; g.shadowBlur = 0;
+  g.stroke();
+  if (music) {   // bright tips in the cycling accent colour
+    g.strokeStyle = rgba(GOLD, alpha); g.lineWidth = 3.4 - 1.4 * cm; g.beginPath();
+    for (let i = 0; i < NBARS; i++) {
+      const a = (i / NBARS) * 6.2832, r1 = R * 1.55 + 6 + bars[i] * R * 1.5, ca = Math.cos(a), sa = Math.sin(a);
+      g.moveTo(ca * (r1 - 1), sa * (r1 - 1)); g.lineTo(ca * (r1 + 5), sa * (r1 + 5));
+    }
+    g.stroke();
+  }
+  g.restore(); g.lineCap = 'butt'; g.shadowBlur = 0;
 
   // live system gauges as thin arcs inside the bars: CPU / GPU / MEM
   const sT = S.stats;
@@ -412,7 +447,7 @@ function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
       const bg = g.createRadialGradient(bx, by, 0, bx, by, R * 1.5); bg.addColorStop(0, rgba(col, 0.34 * alpha)); bg.addColorStop(1, rgba(col, 0));
       g.fillStyle = bg; g.beginPath(); g.arc(bx, by, R * 1.5, 0, TAU); g.fill();
     }
-    const P = q > 0 ? 120 : 64, amp = 1 + lv * 3.2;
+    const P = q > 0 ? 120 : 64, amp = 1 + Math.max(lv, music ? Math.min(0.6, (S.specShown[0] + S.specShown[1] + S.specShown[2]) / 3) : 0) * 3.2;
     const rings = [[1.32, c, 0.7, 5, 0.9], [1.58, GOLD, 0.55, 7, -0.7], [1.86, VIOLET, 0.6, 4, 0.55], [2.12, ROSE, 0.5, 9, -0.45], [2.42, c, 0.4, 6, 0.3], [2.7, GOLD, 0.3, 11, -0.25]];
     g.lineWidth = 2.6; g.lineJoin = 'round'; g.shadowBlur = 8;
     rings.forEach(([k, col, a, n, sp], ri) => {
@@ -469,6 +504,7 @@ function frame(ms) {
   S.prom += (active - S.prom) * 0.06;
   S.hold += ((pttActive ? 1 : 0) - S.hold) * 0.15;
   S.target *= 0.9;
+  updateSpectrum(t);
   S.level += (S.target - S.level) * 0.35;
   const lv = S.level, c = S.color;
 

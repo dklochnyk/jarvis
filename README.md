@@ -135,7 +135,7 @@ Wake word and speech-to-text run on your machine. Only the text of what you say 
 
 Just the Jarvis core, bottom-right of the main screen: the digital brain inside layered rings in cyan, gold, violet and rose (tick scales, targeting brackets, hexagon cells, a scrolling hex data ring, a node network, circuit traces, a radar sweep with blips, a voice-level power ring, a satellite, ripples, and live CPU / memory / network / clock chips on the rim). It reacts to listening, thinking and speaking, and shrinks to a small icon when a window is open on its screen (windows on other monitors change nothing).
 
-The CPU/memory/network panels and the Spotify player were removed. Voice control of Spotify still works; the PC audio capture is off by default (`hud: real_spectrum`).
+The CPU/memory/network panels and the Spotify player were removed. Voice control of Spotify still works. When Jarvis isn't listening to speech, the ring of bars shows the sound your PC is playing (needs the loopback capture, `hud: real_spectrum: true`; set it false to save CPU, then it only reacts while Spotify is playing).
 
 - **Move / resize:** RIGHT-drag the core; hold RIGHT and scroll to resize; middle-click to reset. Positions are remembered; Ctrl+Alt+R resets everything. Tray menu > *Lock / unlock panels* makes them click-through.
 - **Talk to it:** press and HOLD the LEFT mouse button on the core, speak, let go. Pressing while Jarvis talks cuts him off.

@@ -48,7 +48,7 @@ tts:
 # When a window is open the orb shrinks into the bottom-right corner, and the clock,
 # name badge, stats etc. hide wherever a window covers them.
 hud:
-  real_spectrum: false  # visualiser follows your PC's audio output. Set false if it causes any audio trouble
+  real_spectrum: true   # visualiser follows your PC's audio output. Set false if it causes any audio trouble
   ignore_apps: []      # programs whose windows should NOT count, e.g. [spotify, discord]
 
 # --- Quick-launch dock (the clickable tiles on the HUD) --------------------------
