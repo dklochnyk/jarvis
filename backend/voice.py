@@ -35,6 +35,7 @@ class Mic:
         self.q = queue.Queue(maxsize=300)
         self.muted = False
         self.stream = None
+        self.sr, self.ch = SAMPLE_RATE, 1
         self.last_cb = time.time()
 
     def name(self):
@@ -43,19 +44,63 @@ class Mic:
         except Exception as e:
             return f"unknown ({e})"
 
+    def _formats(self):
+        """Formats to try, best first: what we want (16 kHz mono), then whatever the device itself supports."""
+        out = [(SAMPLE_RATE, 1)]
+        try:
+            info = sd.query_devices(self.device, "input")
+            dsr = int(info.get("default_samplerate") or 0)
+            maxch = int(info.get("max_input_channels") or 1)
+        except Exception:
+            dsr, maxch = 0, 1
+        rates = [r for r in (dsr, 48000, 44100, 32000, 22050, 8000) if r]
+        for r in dict.fromkeys(rates):
+            for ch in (1, 2):
+                if ch <= max(1, maxch) and (r, ch) not in out:
+                    out.append((r, ch))
+        return out
+
     def start(self):
-        self.stream = sd.InputStream(
-            samplerate=SAMPLE_RATE, channels=1, dtype="int16", blocksize=FRAME,
-            callback=self._cb, device=self.device,
-        )
-        self.stream.start()
+        last = None
+        for sr, ch in self._formats():
+            self.sr, self.ch = sr, ch
+            bs = FRAME if sr == SAMPLE_RATE else max(1, int(round(FRAME * sr / SAMPLE_RATE)))
+            try:
+                self.stream = sd.InputStream(
+                    samplerate=sr, channels=ch, dtype="int16", blocksize=bs,
+                    callback=self._cb, device=self.device,
+                )
+                self.stream.start()
+                return
+            except Exception as e:   # this microphone can't do that format: try the next one
+                last = e
+                try:
+                    if self.stream:
+                        self.stream.close()
+                except Exception:
+                    pass
+                self.stream = None
+        raise last
+
+    def _to_16k(self, indata):
+        x = indata[:, 0] if indata.shape[1] == 1 else indata.astype(np.int32).mean(axis=1)
+        if self.sr == SAMPLE_RATE:
+            return x.astype(np.int16).copy()
+        ratio = self.sr // SAMPLE_RATE
+        if self.sr % SAMPLE_RATE == 0 and len(x) >= ratio:
+            n = (len(x) // ratio) * ratio
+            y = x[:n].astype(np.float32).reshape(-1, ratio).mean(axis=1)   # averaging also filters out high frequencies
+        else:
+            n = max(1, int(len(x) * SAMPLE_RATE / self.sr))
+            y = np.interp(np.linspace(0, len(x) - 1, n), np.arange(len(x)), x.astype(np.float32))
+        return y.astype(np.int16)
 
     def _cb(self, indata, frames, t, status):
         self.last_cb = time.time()
         if self.muted:
             return
         try:
-            self.q.put_nowait(indata[:, 0].copy())
+            self.q.put_nowait(self._to_16k(indata))
         except queue.Full:
             pass
 
