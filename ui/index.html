@@ -31,9 +31,9 @@
   .panel.grab { outline: 1px dashed rgba(var(--c), .6); }
 
   /* performance hub */
-  #perf { top: 28px; right: 28px; width: 392px; }
-  #perfc { display: block; width: 380px; height: 396px; }
-  #sysline { margin-top: 4px; opacity: .6; display: flex; justify-content: space-between; }
+  #perf { top: 14px; left: 28px; right: 28px; }
+  #perfc { display: block; width: 100%; height: 92px; }
+  #sysline { margin-top: 0; opacity: .6; display: flex; justify-content: space-between; }
 
   /* spotify player */
   #player { bottom: 36px; left: 28px; width: 500px; }
@@ -95,7 +95,6 @@
   <canvas id="c"></canvas>
   <div id="stage">
     <div id="perf" class="panel">
-      <div class="ph">Performance hub</div>
       <canvas id="perfc"></canvas>
       <div id="sysline"><span id="up">UP --</span><span id="bat"></span></div>
     </div>

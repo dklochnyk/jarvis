@@ -1,4 +1,4 @@
-// Performance hub, free-flowing: two soft rings (CPU, memory), smooth flowing curves, rounded core pills. No boxes or frames.
+// Performance hub, free-flowing: smooth flowing curves in a strip, rounded core pills. No boxes or frames.
 (function (root) {
   const N = 60, TAU = Math.PI * 2;
   const push = (arr, v) => { arr.push(v); while (arr.length > N) arr.shift(); return arr; };
@@ -7,27 +7,11 @@
 
   const H = { cpu: [], mem: [], down: [], up: [] };
   let last = null;
-  const shown = { cpu: 0, mem: 0 };   // eased values so the rings glide instead of jumping
 
   function update(m) { last = m; push(H.cpu, m.cpu); push(H.mem, m.mem); push(H.down, m.net_down || 0); push(H.up, m.net_up || 0); }
 
   const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
   const hot = (pct, c, a = 0.95) => (pct > 90 ? `rgba(255,90,90,${a})` : pct > 75 ? `rgba(255,180,60,${a})` : rgba(c, a));
-
-  // a soft ring: faint full circle, a round-capped arc for the value, a slow orbiting dot, big number inside
-  function ring(ctx, x, y, r, pct, c, label, sub, t) {
-    ctx.save(); ctx.translate(x, y); ctx.lineCap = 'round';
-    ctx.lineWidth = 5; ctx.strokeStyle = rgba(c, 0.12); ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.stroke();
-    const a0 = -Math.PI / 2, a1 = a0 + TAU * Math.max(0.01, Math.min(1, pct / 100));
-    ctx.strokeStyle = hot(pct, c); ctx.beginPath(); ctx.arc(0, 0, r, a0, a1); ctx.stroke();
-    ctx.lineWidth = 1; ctx.strokeStyle = rgba(c, 0.28); ctx.beginPath(); ctx.arc(0, 0, r - 9, t * 0.5, t * 0.5 + 2.2); ctx.stroke();
-    ctx.beginPath(); ctx.arc(0, 0, r - 9, t * 0.5 + 3.4, t * 0.5 + 4.6); ctx.stroke();
-    ctx.fillStyle = rgba(c, 0.95); ctx.beginPath(); ctx.arc(Math.cos(a1) * r, Math.sin(a1) * r, 2.6, 0, TAU); ctx.fill();
-    ctx.textAlign = 'center'; ctx.fillStyle = '#eaffff'; ctx.font = '300 24px "Segoe UI", sans-serif'; ctx.fillText(Math.round(pct) + '%', 0, 8);
-    ctx.font = '9px Consolas, monospace'; ctx.fillStyle = rgba(c, 0.85); ctx.fillText(label, 0, r + 22);
-    ctx.fillStyle = rgba(c, 0.5); ctx.fillText(sub, 0, r + 34);
-    ctx.restore();
-  }
 
   // smooth flowing curve (midpoint quadratic smoothing) with a fading fill underneath and a glowing head
   function flow(ctx, data, x, y, w, h, max, c, alpha, fill, t, head) {
@@ -48,36 +32,33 @@
       ctx.strokeStyle = rgba(c, 0.5); ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(L[0], L[1], 5 + Math.sin(t * 4), 0, TAU); ctx.stroke();
     }
   }
-  function label(ctx, left, right, x, y, w, c) {
-    ctx.font = '9px Consolas, monospace'; ctx.textAlign = 'left'; ctx.fillStyle = rgba(c, 0.8); ctx.fillText(left, x, y);
-    ctx.textAlign = 'right'; ctx.fillStyle = rgba(c, 0.6); ctx.fillText(right, x + w, y);
+  // one free-flowing section: small title, big number, then the wave. No frames.
+  function section(ctx, title, big, small, x, w, series, max, c, t) {
+    ctx.shadowColor = 'rgba(0,6,14,.9)'; ctx.shadowBlur = 6;   // keeps the text readable over bright windows
+    ctx.textAlign = 'left'; ctx.font = '9px Consolas, monospace'; ctx.fillStyle = rgba(c, 0.8); ctx.fillText(title, x, 11);
+    ctx.fillStyle = '#eaffff'; ctx.font = '300 20px "Segoe UI", sans-serif'; ctx.fillText(big, x, 33);
+    ctx.textAlign = 'right'; ctx.font = '9px Consolas, monospace'; ctx.fillStyle = rgba(c, 0.6); ctx.fillText(small, x + w, 11); ctx.shadowBlur = 0;
+    series.forEach((s, i) => flow(ctx, s.data, x, 40, w, 46, max, c, s.alpha, s.fill, t, i === series.length - 1 && s.head));
   }
 
   function draw(cv, c, sc, t) {
     if (!last) return;
     const ctx = cv.getContext('2d'), W = cv.clientWidth, Hh = cv.clientHeight;
-    if (cv.width !== Math.round(W * sc)) { cv.width = Math.round(W * sc); cv.height = Math.round(Hh * sc); }
+    if (cv.width !== Math.round(W * sc) || cv.height !== Math.round(Hh * sc)) { cv.width = Math.round(W * sc); cv.height = Math.round(Hh * sc); }
     ctx.setTransform(sc, 0, 0, sc, 0, 0); ctx.clearRect(0, 0, W, Hh);
-    const m = last;
-    shown.cpu += (m.cpu - shown.cpu) * 0.5; shown.mem += (m.mem - shown.mem) * 0.5;
-    ring(ctx, W * 0.27, 52, 36, shown.cpu, c, 'CPU', m.cores.length + ' CORES', t);
-    ring(ctx, W * 0.73, 52, 36, shown.mem, c, 'MEMORY', m.mem_used + ' / ' + Math.round(m.mem_total) + ' GB', t);
-
-    label(ctx, 'LOAD · 60 S', Math.round(m.cpu) + '% CPU', 0, 140, W, c);
-    flow(ctx, H.cpu, 0, 148, W, 52, 100, c, 0.95, true, t, true);
-    label(ctx, 'MEMORY', Math.round(m.mem) + '%', 0, 222, W, c);
-    flow(ctx, H.mem, 0, 230, W, 38, 100, c, 0.8, true, t, false);
+    const m = last, gap = 36, usable = W - gap * 3, w1 = usable * 0.3, w2 = usable * 0.22, w3 = usable * 0.3, w4 = usable * 0.18;
+    const x1 = 0, x2 = x1 + w1 + gap, x3 = x2 + w2 + gap, x4 = x3 + w3 + gap;
+    section(ctx, 'CPU · 60 S', Math.round(m.cpu) + '%', m.cores.length + ' CORES', x1, w1, [{ data: H.cpu, alpha: 0.95, fill: true, head: true }], 100, c, t);
+    section(ctx, 'MEMORY', Math.round(m.mem) + '%', m.mem_used + ' / ' + Math.round(m.mem_total) + ' GB', x2, w2, [{ data: H.mem, alpha: 0.9, fill: true, head: true }], 100, c, t);
     const nmax = Math.max(50, ...H.down, ...H.up);
-    label(ctx, '▼ ' + fmtRate(m.net_down), '▲ ' + fmtRate(m.net_up), 0, 290, W, c);
-    flow(ctx, H.up, 0, 298, W, 40, nmax, c, 0.4, false, t, false);
-    flow(ctx, H.down, 0, 298, W, 40, nmax, c, 0.95, true, t, true);
-
-    // cores: rounded pills that rise from a soft baseline
-    const n = m.cores.length, gap = 5, bw = Math.max(4, (W - gap * (n - 1)) / n);
+    section(ctx, 'NETWORK', '▼ ' + fmtRate(m.net_down), '▲ ' + fmtRate(m.net_up), x3, w3, [{ data: H.up, alpha: 0.4, fill: false }, { data: H.down, alpha: 0.95, fill: true, head: true }], nmax, c, t);
+    // cores: rounded pills
+    ctx.textAlign = 'left'; ctx.font = '9px Consolas, monospace'; ctx.fillStyle = rgba(c, 0.8); ctx.fillText('CORES', x4, 11);
+    const n = m.cores.length, cg = 4, bw = Math.max(3, (w4 - cg * (n - 1)) / n);
     for (let i = 0; i < n; i++) {
-      const v = m.cores[i], h = 4 + (v / 100) * 24, x = i * (bw + gap);
-      ctx.fillStyle = rgba(c, 0.1); ctx.beginPath(); ctx.roundRect(x, 356, bw, 28, bw / 2); ctx.fill();
-      ctx.fillStyle = hot(v, c, 0.85); ctx.beginPath(); ctx.roundRect(x, 384 - h, bw, h, bw / 2); ctx.fill();
+      const v = m.cores[i], h = 4 + (v / 100) * 38, x = x4 + i * (bw + cg);
+      ctx.fillStyle = rgba(c, 0.1); ctx.beginPath(); ctx.roundRect(x, 44, bw, 42, bw / 2); ctx.fill();
+      ctx.fillStyle = hot(v, c, 0.85); ctx.beginPath(); ctx.roundRect(x, 86 - h, bw, h, bw / 2); ctx.fill();
     }
   }
 
