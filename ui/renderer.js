@@ -161,7 +161,7 @@ window.jarvis.onScreens && window.jarvis.onScreens((_e, m) => {
   resize(); MOVABLE.forEach(applyUI); MOVABLE.forEach(keepOnScreen); recomputeBusy(); updateCovered();
 });
 
-const NBARS = 72;
+const NBARS = 144;
 const bars = new Float32Array(NBARS);
 const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
 const brain = new BrainViz.Brain(7);
@@ -244,134 +244,152 @@ function hueOf(c) {
   const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
   return h * 60;
 }
-function cycleAccents(t, c) {
-  // one accent (gold) laps the whole spectrum; the other two only drift a little either side of the main colour, so the HUD stays mostly one colour
-  const hb = hueOf(c);
-  hsl(t * 28, 1, 0.62, GOLD); hsl(hb + 38 * Math.sin(t * 0.45), 0.95, 0.72, VIOLET); hsl(hb - 38 * Math.sin(t * 0.35 + 1), 0.95, 0.76, ROSE);
-}
 const RING_TEXT = 'J.A.R.V.I.S.  ·  AI CORE  ·  ';
+
+// ---- palette: mostly the state colour (cyan), with a warm orange accent like the reference art ----
+function cycleAccents(t, c) {
+  const hb = hueOf(c);
+  hsl(28 + 10 * Math.sin(t * 0.3), 1, 0.58, GOLD);               // orange, drifting a little
+  hsl(hb + 22 * Math.sin(t * 0.45), 0.95, 0.74, VIOLET);          // lighter tints of the main colour
+  hsl(hb - 22 * Math.sin(t * 0.35 + 1), 0.9, 0.82, ROSE);
+}
+
+const TAU = 6.2832;
+// thick broken arcs: [radius, segments, fill fraction, lineWidth]; drawn as one path each
+function brokenArcs(g, r, segs, frac, rot) {
+  const step = TAU / segs, span = step * frac;
+  g.beginPath();
+  for (let s = 0; s < segs; s++) { const a0 = rot + s * step; g.moveTo(Math.cos(a0) * r, Math.sin(a0) * r); g.arc(0, 0, r, a0, a0 + span); }
+  g.stroke();
+}
+// a little hexagon cluster like the one in the corner of the reference
+function hexCluster(g, x, y, s, fillCol) {
+  const cells = [[0, 0], [1.75, 0], [0.875, 1.5], [-0.875, 1.5], [0.875, -1.5], [-0.875, -1.5], [-1.75, 0]];
+  g.beginPath();
+  cells.forEach(([cx, cy]) => { for (let k = 0; k <= 6; k++) { const a = (k / 6) * TAU, px = x + (cx + Math.cos(a)) * s, py = y + (cy + Math.sin(a)) * s; k ? g.lineTo(px, py) : g.moveTo(px, py); } });
+  g.stroke();
+  g.fillStyle = fillCol; g.beginPath(); for (let k = 0; k <= 6; k++) { const a = (k / 6) * TAU, px = x + Math.cos(a) * s, py = y + Math.sin(a) * s; k ? g.lineTo(px, py) : g.moveTo(px, py); } g.fill();
+}
 
 function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
   cycleAccents(t, c);
-  const g = ctx, sc = canvasSc, mid = canvasSide / 2;
+  const g = ctx, sc = canvasSc, mid = canvasSide / 2, q = QUALITY;
   g.setTransform(sc, 0, 0, sc, 0, 0);
   g.clearRect(0, 0, canvasSide, canvasSide);
   g.save(); g.translate(mid, mid);
-  const q = QUALITY, pulse = 1 + 0.06 * Math.sin(t * 2) + lv * 0.25;
-
-  // glow
-  let gr = g.createRadialGradient(0, 0, 0, 0, 0, R * 3.2 * pulse);
-  gr.addColorStop(0, rgba(c, 0.42 * alpha)); gr.addColorStop(0.4, rgba(c, 0.15 * alpha)); gr.addColorStop(1, rgba(c, 0));
-  g.fillStyle = gr; g.beginPath(); g.arc(0, 0, R * 3.2 * pulse, 0, 7); g.fill();
-
-  g.globalAlpha = 1 - 0.92 * cm;   // the rigid instrument layer fades out when the core is small; the free-form waves stay
-  // bold glowing border: double rim ring
-  if (cm < 0.9) {
-    g.shadowColor = rgba(c, 1); g.shadowBlur = 16; g.strokeStyle = rgba(c, alpha); g.lineWidth = 4;
-    g.beginPath(); g.arc(0, 0, R * 3.05, 0, 6.2832); g.stroke();
-    g.shadowBlur = 8; g.lineWidth = 1.6; g.strokeStyle = rgba(GOLD, 0.95 * alpha);
-    g.beginPath(); g.arc(0, 0, R * 3.14, 0, 6.2832); g.stroke();
-    g.shadowBlur = 0;
-  }
-  // outer instrument rings: coarse ticks, fine ticks (counter-rotating), dashed guide
-  g.lineWidth = 1;
-  g.save(); g.rotate(-t * 0.1); g.strokeStyle = rgba(c, 0.75 * alpha); g.lineWidth = 1.6; g.stroke(tickPath(R * 2.55, 60, 9, 4, 5)); g.restore();
-  if (q > 0) { g.save(); g.rotate(t * 0.05); g.strokeStyle = rgba(c, 0.45 * alpha); g.stroke(tickPath(R * 2.4, 180, 4, 2, 15)); g.restore(); }
-  g.setLineDash([3, 7]); g.lineDashOffset = -t * 6; g.strokeStyle = rgba(c, 0.6 * alpha); g.lineWidth = 1.4;
-  g.beginPath(); g.arc(0, 0, R * 2.22, 0, 6.2832); g.stroke(); g.setLineDash([]);
-
-  // curved name ring
-  if (q > 0 && cm < 0.6) {
-    const fs = Math.max(8, R * 0.2), rr = R * 2.8, n = RING_TEXT.length, step = 6.2832 / n;
-    g.font = `bold ${fs}px Consolas, monospace`; g.textAlign = 'center'; g.fillStyle = rgba(c, 0.95 * alpha * (1 - cm));
-    g.save(); g.rotate(t * 0.04);
-    for (let i = 0; i < n; i++) { const ch = RING_TEXT[i]; if (ch === ' ') { g.rotate(step); continue; } g.save(); g.translate(0, -rr); g.fillText(ch, 0, 0); g.restore(); g.rotate(step); }
-    g.restore();
-  }
-
-  // cardinal pointers
-  g.fillStyle = rgba(c, 0.8 * alpha);
-  for (let i = 0; i < 4; i++) { g.save(); g.rotate((i * Math.PI) / 2); g.beginPath(); g.moveTo(0, -R * 2.72); g.lineTo(-R * 0.07, -R * 2.86); g.lineTo(R * 0.07, -R * 2.86); g.closePath(); g.fill(); g.restore(); }
-
-  // radial audio bars (one path)
-  let sum = 0;
   const speech = st === 'listening' || st === 'speaking' || pttActive;
   let en = 0; for (let i = 0; i < 40; i++) en += S.specShown[i];
-  const music = !speech && en > 0.6;              // not listening to speech: the ring shows the sound your PC is playing
+  const music = !speech && en > 0.6;
+  const bass = (S.specShown[0] + S.specShown[1] + S.specShown[2]) / 3;
+  const pulse = 1 + 0.05 * Math.sin(t * 2) + lv * 0.2;
+  const rig = 1 - 0.92 * cm;                       // the technical layer fades when the core is small
+
+  // glow
+  let gr = g.createRadialGradient(0, 0, 0, 0, 0, R * 3.1 * pulse);
+  gr.addColorStop(0, rgba(c, 0.4 * alpha)); gr.addColorStop(0.45, rgba(c, 0.13 * alpha)); gr.addColorStop(1, rgba(c, 0));
+  g.fillStyle = gr; g.beginPath(); g.arc(0, 0, R * 3.1 * pulse, 0, 7); g.fill();
+
+  // ======== technical layer (outer): crosshairs, arrows, fragments, scales ========
+  g.globalAlpha = rig;
+  g.lineCap = 'butt'; g.lineWidth = 1;
+  // crosshair lines with a gap around the core
+  g.strokeStyle = rgba(c, 0.4 * alpha); g.beginPath();
+  for (let i = 0; i < 4; i++) { const ca = Math.cos(i * 1.5708), sa = Math.sin(i * 1.5708); g.moveTo(ca * R * 2.05, sa * R * 2.05); g.lineTo(ca * R * 3.0, sa * R * 3.0); }
+  g.stroke();
+  // two long diagonal lines with arrowheads, drifting slowly
+  g.save(); g.rotate(0.65 + Math.sin(t * 0.1) * 0.12); g.strokeStyle = rgba(c, 0.55 * alpha); g.fillStyle = rgba(c, 0.8 * alpha); g.beginPath();
+  g.moveTo(-R * 2.9, 0); g.lineTo(-R * 1.3, 0); g.moveTo(R * 1.3, 0); g.lineTo(R * 2.9, 0); g.stroke();
+  g.beginPath(); g.moveTo(R * 2.95, 0); g.lineTo(R * 2.75, -R * 0.07); g.lineTo(R * 2.75, R * 0.07); g.closePath(); g.fill(); g.restore();
+  g.save(); g.rotate(-0.95 + Math.sin(t * 0.13) * 0.1); g.strokeStyle = rgba(c, 0.4 * alpha); g.beginPath();
+  g.moveTo(-R * 2.6, 0); g.lineTo(-R * 1.6, 0); g.moveTo(R * 1.6, 0); g.lineTo(R * 2.6, 0); g.stroke(); g.restore();
+  // scales: fine ticks with long marks
+  g.save(); g.rotate(-t * 0.03); g.strokeStyle = rgba(c, 0.55 * alpha); g.stroke(tickPath(R * 2.9, 120, 9, 4, 10)); g.restore();
+  g.save(); g.rotate(t * 0.02); g.strokeStyle = rgba(c, 0.3 * alpha); g.stroke(tickPath(R * 2.2, 240, 3, 1.5, 20)); g.restore();
+  // scattered fragment arcs (thin, uneven), like the loose technical linework
+  g.lineWidth = 1.2; g.strokeStyle = rgba(c, 0.6 * alpha); g.beginPath();
+  [[2.78, 0.3, 0.5], [2.78, 2.1, 0.22], [2.5, 3.6, 0.7], [2.62, 5.2, 0.35], [2.3, 1.1, 0.25], [2.4, 4.4, 0.18]].forEach(([k, a0, sp], i) => {
+    const a = a0 + t * (i % 2 ? 0.05 : -0.04); g.moveTo(Math.cos(a) * R * k, Math.sin(a) * R * k); g.arc(0, 0, R * k, a, a + sp);
+  });
+  g.stroke();
+  // thin outer rim with glow
+  g.shadowColor = rgba(c, 1); g.shadowBlur = 12; g.lineWidth = 2.2; g.strokeStyle = rgba(c, 0.95 * alpha);
+  g.beginPath(); g.arc(0, 0, R * 3.05, 0, TAU); g.stroke(); g.shadowBlur = 0;
+
+  // ======== thick segmented rings ========
+  g.shadowColor = rgba(c, 0.9); g.shadowBlur = 10;
+  g.lineWidth = 9; g.strokeStyle = rgba(c, 0.92 * alpha);
+  g.save(); g.rotate(t * 0.06 * speed + 0.4); brokenArcs(g, R * 2.62, 3, 0.62, 0); g.restore();
+  g.lineWidth = 3.2; g.strokeStyle = rgba(VIOLET, 0.95 * alpha);
+  g.save(); g.rotate(-t * 0.11 * speed); brokenArcs(g, R * 2.4, 7, 0.45, 0); g.restore();
+  g.lineWidth = 5.5; g.strokeStyle = rgba(c, alpha);
+  g.save(); g.rotate(t * 0.14 * speed + 2); brokenArcs(g, R * 2.06, 2, 0.4, 0); g.restore();
+  g.shadowBlur = 0;
+  g.lineWidth = 1.4; g.strokeStyle = rgba(c, 0.55 * alpha); g.setLineDash([2, 6]); g.lineDashOffset = -t * 8;
+  g.beginPath(); g.arc(0, 0, R * 2.22, 0, TAU); g.stroke(); g.setLineDash([]);
+  // hexagon cluster
+  if (cm < 0.7) { g.lineWidth = 1.4; g.strokeStyle = rgba(c, 0.9 * alpha); hexCluster(g, R * 2.5, R * 0.8, R * 0.07, rgba(GOLD, alpha)); }
+  g.globalAlpha = 1;
+
+  // ======== the sunburst ring: dense radial lines; reacts to voice, and to the PC's sound when not listening ========
+  let sum = 0;
   for (let i = 0; i < NBARS; i++) {
     const wob = 0.35 + 0.65 * Math.abs(Math.sin(i * 1.7 + t * 6) * Math.cos(i * 0.6 - t * 3));
     const f = i / NBARS, k = Math.min(39, Math.floor((f < 0.5 ? f * 2 : (1 - f) * 2) * 39));
-    const want = speech ? lv * wob : music ? Math.min(0.88, S.specShown[k] * 1.5) : 0.04 + 0.03 * Math.sin(t * 2 + i);
+    const want = speech ? lv * wob : music ? Math.min(0.85, S.specShown[k] * 1.5) : 0.04 + 0.03 * Math.sin(t * 2 + i);
     bars[i] += (want - bars[i]) * (music ? 0.55 : 0.4); sum += bars[i];
   }
-  g.strokeStyle = rgba(c, Math.min(1, 0.4 + (sum / NBARS) * 2.4) * alpha); g.lineWidth = 3.4 - 1.4 * cm; g.lineCap = 'round'; g.shadowColor = rgba(c, 0.9); g.shadowBlur = 10; g.beginPath();
-  g.save(); g.rotate(music ? -1.5708 : t * 0.08 * speed);
+  g.lineCap = 'butt'; g.lineWidth = Math.max(1.2, 2.2 - 0.9 * cm); g.shadowColor = rgba(c, 0.9); g.shadowBlur = 8;
+  g.strokeStyle = rgba(c, Math.min(1, 0.65 + (sum / NBARS) * 2) * alpha); g.beginPath();
+  g.save(); g.rotate(music ? -1.5708 : t * 0.05 * speed);
   for (let i = 0; i < NBARS; i++) {
-    const a = (i / NBARS) * 6.2832, r0 = R * 1.55, r1 = r0 + 6 + bars[i] * R * (music ? 1.5 : 1.1), ca = Math.cos(a), sa = Math.sin(a);
-    g.moveTo(ca * r0, sa * r0); g.lineTo(ca * r1, sa * r1);
+    const a = (i / NBARS) * TAU, r0 = R * 1.5, len = R * (0.07 + 0.06 * Math.abs(Math.sin(i * 2.3)) + bars[i] * (music ? 1.15 : 0.9)), ca = Math.cos(a), sa = Math.sin(a);
+    g.moveTo(ca * r0, sa * r0); g.lineTo(ca * (r0 + len), sa * (r0 + len));
   }
   g.stroke();
-  if (music) {   // bright tips in the cycling accent colour
-    g.strokeStyle = rgba(GOLD, alpha); g.lineWidth = 3.4 - 1.4 * cm; g.beginPath();
+  if (music) {   // the loud lines glow orange at their tips
+    g.strokeStyle = rgba(GOLD, alpha); g.lineWidth = 2.6; g.beginPath();
     for (let i = 0; i < NBARS; i++) {
-      const a = (i / NBARS) * 6.2832, r1 = R * 1.55 + 6 + bars[i] * R * 1.5, ca = Math.cos(a), sa = Math.sin(a);
-      g.moveTo(ca * (r1 - 1), sa * (r1 - 1)); g.lineTo(ca * (r1 + 5), sa * (r1 + 5));
+      if (bars[i] < 0.18) continue;
+      const a = (i / NBARS) * TAU, r1 = R * (1.5 + 0.1 + bars[i] * 1.15), ca = Math.cos(a), sa = Math.sin(a);
+      g.moveTo(ca * r1, sa * r1); g.lineTo(ca * (r1 + 5), sa * (r1 + 5));
     }
     g.stroke();
   }
-  g.restore(); g.lineCap = 'butt'; g.shadowBlur = 0;
+  g.restore(); g.shadowBlur = 0;
+  // a thin ring just inside the sunburst
+  g.lineWidth = 1.2; g.strokeStyle = rgba(c, 0.7 * alpha); g.beginPath(); g.arc(0, 0, R * 1.46, 0, TAU); g.stroke();
 
-  // live system gauges as thin arcs inside the bars: CPU / GPU / MEM
+  // live CPU / memory arcs on the inner side
   const sT = S.stats;
   if (sT && q > 0) {
-    const arcs = [['CPU', sT.cpu, 1.44], ['MEM', sT.mem, 1.36]];
-    g.lineWidth = 2;
-    arcs.forEach(([name, v, k], idx) => {
+    [['CPU', sT.cpu, 1.4, c], ['MEM', sT.mem, 1.33, VIOLET]].forEach(([name, v, k, col], idx) => {
       const base = -Math.PI / 2 + idx * Math.PI + 0.12, span = Math.PI - 0.24;
-      g.strokeStyle = rgba(c, 0.16 * alpha); g.beginPath(); g.arc(0, 0, R * k, base, base + span); g.stroke();
-      if (v != null) { g.strokeStyle = v > 90 ? `rgba(255,90,90,${alpha})` : rgba(idx ? VIOLET : c, 0.95 * alpha); g.beginPath(); g.arc(0, 0, R * k, base, base + span * Math.min(1, v / 100)); g.stroke(); }
+      g.lineWidth = 2.4; g.strokeStyle = rgba(col, 0.2 * alpha); g.beginPath(); g.arc(0, 0, R * k, base, base + span); g.stroke();
+      if (v != null) { g.strokeStyle = v > 90 ? `rgba(255,90,90,${alpha})` : rgba(col, alpha); g.beginPath(); g.arc(0, 0, R * k, base, base + span * Math.min(1, v / 100)); g.stroke(); }
     });
   }
 
-  // arc-reactor rings, each in its own colour
-  g.lineWidth = 4; g.shadowBlur = 12;
-  [[R * 1.25, 3, 0.7, 1, c], [R * 1.05, 5, 0.55, -1.4, GOLD], [R * 0.9, 2, 0.8, 2.1, VIOLET]].forEach(([rr, segs, frac, dir, col]) => {
-    const base = t * speed * dir, span = (6.2832 / segs) * frac * 0.8;
-    g.strokeStyle = rgba(col, alpha); g.shadowColor = rgba(col, 0.95); g.beginPath();
-    for (let s = 0; s < segs; s++) { const a0 = base + (s / segs) * 6.2832; g.moveTo(Math.cos(a0) * rr, Math.sin(a0) * rr); g.arc(0, 0, rr, a0, a0 + span); }
-    g.stroke();
-  });
+  // thick inner rings
+  g.shadowColor = rgba(c, 0.9); g.shadowBlur = 10; g.lineWidth = 6; g.strokeStyle = rgba(c, alpha);
+  g.save(); g.rotate(-t * 0.5 * speed); brokenArcs(g, R * 1.22, 3, 0.7, 0); g.restore();
+  g.lineWidth = 2.4; g.strokeStyle = rgba(VIOLET, alpha);
+  g.save(); g.rotate(t * 0.9 * speed); brokenArcs(g, R * 1.1, 6, 0.5, 0); g.restore();
   g.shadowBlur = 0;
 
-  // segmented power ring (gold) that fills with Jarvis' voice level / activity, plus a rose scale of fine dashes
-  if (q > 0) {
-    const SEG = 36, lit = Math.round(Math.min(1, 0.12 + lv * 1.4 + (st === 'thinking' ? 0.4 : 0)) * SEG), rr = R * 1.88, step = 6.2832 / SEG;
-    g.lineWidth = 6; g.strokeStyle = rgba(GOLD, 0.22 * alpha); g.beginPath();
-    for (let i = lit; i < SEG; i++) { const a0 = -1.5708 + i * step; g.moveTo(Math.cos(a0 + 0.03) * rr, Math.sin(a0 + 0.03) * rr); g.arc(0, 0, rr, a0 + 0.03, a0 + step - 0.03); }
-    g.stroke();
-    g.strokeStyle = rgba(GOLD, alpha); g.shadowColor = rgba(GOLD, 0.9); g.shadowBlur = 10; g.beginPath();
-    for (let i = 0; i < lit; i++) { const a0 = -1.5708 + i * step; g.moveTo(Math.cos(a0 + 0.03) * rr, Math.sin(a0 + 0.03) * rr); g.arc(0, 0, rr, a0 + 0.03, a0 + step - 0.03); }
-    g.stroke();
-    g.save(); g.shadowBlur = 0; g.rotate(t * 0.15); g.strokeStyle = rgba(ROSE, 0.8 * alpha); g.lineWidth = 1.5; g.stroke(tickPath(R * 2.0, 90, 5, 2.5, 9)); g.restore();
-    // satellite with a fading trail on the dashed guide
-    const sa = t * 0.7;
-    for (let i = 0; i < 8; i++) { g.fillStyle = rgba(VIOLET, (0.9 - i * 0.11) * alpha); g.beginPath(); g.arc(Math.cos(sa - i * 0.07) * R * 2.22, Math.sin(sa - i * 0.07) * R * 2.22, 3.2 - i * 0.28, 0, 7); g.fill(); }
-    // degree labels at the four compass points
-    if (cm < 0.6) {
-      g.font = `${Math.max(7, R * 0.14)}px Consolas, monospace`; g.textAlign = 'center'; g.fillStyle = rgba(c, 0.55 * alpha * (1 - cm));
-      [['000', 0, -2.3], ['090', 2.3, 0.05], ['180', 0, 2.38], ['270', -2.3, 0.05]].forEach(([s, kx, ky]) => g.fillText(s, kx * R, ky * R + 3));
-    }
-  }
-
-  // hexagon frame + radar sweep around the brain
-  g.save(); g.rotate(t * 0.12); g.strokeStyle = rgba(ROSE, 0.95 * alpha); g.lineWidth = 2.4; g.shadowColor = rgba(ROSE, 0.9); g.shadowBlur = 10; g.beginPath();
-  for (let i = 0; i <= 6; i++) { const a = (i / 6) * 6.2832, x = Math.cos(a) * R * 0.98, y = Math.sin(a) * R * 0.98; i ? g.lineTo(x, y) : g.moveTo(x, y); }
-  g.stroke(); g.restore(); g.shadowBlur = 0;
+  // ======== the iris: dark disc, radar sweep, hexagon, then the brain ========
+  gr = g.createRadialGradient(0, 0, 0, 0, 0, R * 1.02);
+  gr.addColorStop(0, 'rgba(2,10,20,0.78)'); gr.addColorStop(0.8, 'rgba(3,14,26,0.62)'); gr.addColorStop(1, rgba(c, 0.18));
+  g.fillStyle = gr; g.beginPath(); g.arc(0, 0, R * 1.02, 0, TAU); g.fill();
+  g.lineWidth = 1.2; g.strokeStyle = rgba(c, 0.8 * alpha); g.beginPath(); g.arc(0, 0, R * 0.98, 0, TAU); g.stroke();
+  g.strokeStyle = rgba(c, 0.35 * alpha); g.beginPath(); g.arc(0, 0, R * 0.7, 0, TAU); g.moveTo(R * 0.45, 0); g.arc(0, 0, R * 0.45, 0, TAU); g.stroke();
   if (q > 0 && g.createConicGradient) {
     const sw = g.createConicGradient(t * (st === 'thinking' ? 4 : 1.1), 0, 0);
-    sw.addColorStop(0, rgba(c, 0)); sw.addColorStop(0.9, rgba(c, 0)); sw.addColorStop(1, rgba(c, 0.32 * alpha));
-    g.fillStyle = sw; g.beginPath(); g.arc(0, 0, R * 0.9, 0, 6.2832); g.fill();
+    sw.addColorStop(0, rgba(c, 0)); sw.addColorStop(0.88, rgba(c, 0)); sw.addColorStop(1, rgba(c, 0.38 * alpha));
+    g.fillStyle = sw; g.beginPath(); g.arc(0, 0, R * 0.96, 0, TAU); g.fill();
   }
+  g.save(); g.rotate(t * 0.1); g.strokeStyle = rgba(VIOLET, 0.8 * alpha); g.lineWidth = 1.4; g.beginPath();
+  for (let i = 0; i <= 6; i++) { const a = (i / 6) * TAU, x = Math.cos(a) * R * 0.82, y = Math.sin(a) * R * 0.82; i ? g.lineTo(x, y) : g.moveTo(x, y); }
+  g.stroke(); g.restore();
 
   // hold-to-talk: expanding rings
   if (S.hold > 0.02) {
@@ -382,106 +400,38 @@ function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
     }
   }
 
-  // ---- extra detail: only when the core is big enough to show it ----
-  if (cm < 0.7) {
-    const fa = alpha * (1 - cm), TAU = 6.2832;
-    // faint concentric guide circles
-    g.lineWidth = 1; g.strokeStyle = rgba(c, 0.28 * fa); g.beginPath();
-    for (const k of [1.15, 1.35, 1.7, 2.1, 2.95]) { g.moveTo(R * k, 0); g.arc(0, 0, R * k, 0, TAU); }
-    g.stroke();
-    // targeting brackets on the outer rim
-    g.lineWidth = 4.5; g.strokeStyle = rgba(c, fa); g.shadowColor = rgba(c, 0.95); g.shadowBlur = 12; g.beginPath();
-    for (let i = 0; i < 4; i++) { const a0 = i * TAU / 4 + 0.785 - 0.2; g.moveTo(Math.cos(a0) * R * 2.95, Math.sin(a0) * R * 2.95); g.arc(0, 0, R * 2.95, a0, a0 + 0.4); }
-    g.stroke(); g.shadowBlur = 0;
-    // ring of small hexagon cells (violet), turning slowly
-    g.save(); g.rotate(-t * 0.07); g.strokeStyle = rgba(VIOLET, 0.95 * fa); g.lineWidth = 1.8; g.stroke(hexRing(R * 1.72, 24, R * 0.085)); g.restore();
-    // scrolling data ring (gold hex stream) between the scales
-    if (q > 0) {
-      const n = 56, step = TAU / n, fs = Math.max(6, R * 0.11), seed = Math.floor(t * 2);
-      g.font = `${fs}px Consolas, monospace`; g.textAlign = 'center'; g.fillStyle = rgba(GOLD, 0.9 * fa);
-      g.save(); g.rotate(t * 0.09);
-      for (let i = 0; i < n; i++) { g.save(); g.translate(0, -R * 2.3); g.fillText('0123456789ABCDEF'[((i * 7 + i * i + (i % 5 === 0 ? seed : 0)) & 15)], 0, 0); g.restore(); g.rotate(step); }
-      g.restore();
-    }
-    // network of nodes: a rotating polygon with a bright node on each corner
-    const nn = 7, na = t * 0.18, nr = R * 1.5;
-    g.strokeStyle = rgba(ROSE, 0.3 * fa); g.lineWidth = 1; g.beginPath();
-    for (let i = 0; i <= nn; i++) { const a = na + (i * 3 % nn) * TAU / nn; i ? g.lineTo(Math.cos(a) * nr, Math.sin(a) * nr) : g.moveTo(Math.cos(a) * nr, Math.sin(a) * nr); }
-    g.stroke();
-    g.fillStyle = rgba(ROSE, 0.95 * fa); g.beginPath();
-    for (let i = 0; i < nn; i++) { const a = na + i * TAU / nn; g.moveTo(Math.cos(a) * nr + 2.6, Math.sin(a) * nr); g.arc(Math.cos(a) * nr, Math.sin(a) * nr, 2.6, 0, TAU); }
-    g.fill();
-    // circuit traces inside the hexagon (violet, drifting)
-    g.save(); g.rotate(t * 0.03); g.strokeStyle = rgba(VIOLET, 0.28 * fa); g.lineWidth = 1; g.stroke(circuitPath(R)); g.restore();
-    // radar blips: they flare as the sweep passes and then fade
-    if (q > 0) {
-      const sweep = (t * (st === 'thinking' ? 4 : 1.1)) % TAU;
-      for (let i = 0; i < 7; i++) {
-        const a = (i * 2.399) % TAU, d = (0.35 + ((i * 0.37) % 0.5)) * R, since = (sweep - a + TAU) % TAU, f = Math.max(0, 1 - since / 2.4);
-        if (f <= 0.02) continue;
-        g.fillStyle = rgba(GOLD, f * 0.9 * fa); g.beginPath(); g.arc(Math.cos(a) * d, Math.sin(a) * d, 1.6 + f * 1.6, 0, TAU); g.fill();
-      }
-    }
-    // slow ripple that leaves the core every few seconds
-    const rp = (t / 3.2) % 1; g.strokeStyle = rgba(c, 0.35 * (1 - rp) * fa); g.lineWidth = 1.5; g.beginPath(); g.arc(0, 0, R * (1.2 + rp * 1.7), 0, TAU); g.stroke();
-    // data chips around the rim
-    if (q > 0) {
-      const sT2 = S.stats, d = new Date(), pad = (n) => String(n).padStart(2, '0'), h12 = d.getHours() % 12 || 12;
-      const chips = [[-2.356, 'CPU ' + (sT2 ? Math.round(sT2.cpu) + '%' : '--')], [-0.785, 'MEM ' + (sT2 ? Math.round(sT2.mem) + '%' : '--')],
-        [2.356, 'NET ' + (sT2 ? fmtRate(sT2.net_down || 0) : '--')], [0.785, h12 + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()) + (d.getHours() < 12 ? ' AM' : ' PM')]];
-      g.font = `bold ${Math.max(11, R * 0.21)}px Consolas, monospace`; g.textAlign = 'center'; g.shadowColor = 'rgba(0,0,0,.8)'; g.shadowBlur = 2;
-      for (const [a, s] of chips) {
-        const x = Math.cos(a) * R * 2.5, y = Math.sin(a) * R * 2.5;
-        g.fillStyle = rgba(GOLD, fa); g.fillText(s, x, y + 3);
-      }
-      g.shadowBlur = 0;
-    }
-  }
-
-  g.globalAlpha = 1;
-  // ---- free-form layer: drifting colour clouds, wavy rings that ride the voice, and flowing tendrils ----
-  {
-    const TAU = 6.2832, fw = 0.55 + 0.45 * cm;
-    for (let i = 0; i < 3; i++) {
-      const a = t * (0.25 + i * 0.08) + i * 2.1, bx = Math.cos(a) * R * 0.75, by = Math.sin(a * 1.2) * R * 0.75, col = [c, GOLD, VIOLET][i];
-      const bg = g.createRadialGradient(bx, by, 0, bx, by, R * 1.5); bg.addColorStop(0, rgba(col, 0.34 * alpha)); bg.addColorStop(1, rgba(col, 0));
-      g.fillStyle = bg; g.beginPath(); g.arc(bx, by, R * 1.5, 0, TAU); g.fill();
-    }
-    const P = q > 0 ? 120 : 64, amp = 1 + Math.max(lv, music ? Math.min(0.6, (S.specShown[0] + S.specShown[1] + S.specShown[2]) / 3) : 0) * 3.2;
-    const rings = [[1.32, c, 0.7, 5, 0.9], [1.58, GOLD, 0.55, 7, -0.7], [1.86, VIOLET, 0.6, 4, 0.55], [2.12, ROSE, 0.5, 9, -0.45], [2.42, c, 0.4, 6, 0.3], [2.7, GOLD, 0.3, 11, -0.25]];
-    g.lineWidth = 2.6; g.lineJoin = 'round'; g.shadowBlur = 8;
-    rings.forEach(([k, col, a, n, sp], ri) => {
-      if (cm > 0.5 && ri > 3) return;
-      g.strokeStyle = rgba(col, Math.min(1, a * 1.5) * alpha * fw); g.shadowColor = rgba(col, 0.9); g.beginPath();
-      for (let i = 0; i <= P; i++) {
-        const th = (i / P) * TAU, rr = R * k + R * 0.05 * amp * Math.sin(n * th + t * sp * 2.4) + R * 0.03 * amp * Math.sin((n + 3) * th - t * sp * 1.7 + ri);
-        i ? g.lineTo(Math.cos(th) * rr, Math.sin(th) * rr) : g.moveTo(Math.cos(th) * rr, Math.sin(th) * rr);
-      }
-      g.stroke();
-    });
-    // tendrils drifting outward
-    g.shadowBlur = 0; g.lineWidth = 1.8; g.strokeStyle = rgba(c, 0.55 * alpha * fw); g.beginPath();
-    const nt = q > 0 ? 18 : 10;
-    for (let i = 0; i < nt; i++) {
-      const a = (i / nt) * TAU + t * 0.05, w = Math.sin(t * 1.3 + i * 1.7), r1 = R * 1.15, r2 = R * (1.7 + 0.1 * Math.sin(t + i)), r3 = R * (2.35 + lv * 0.7 + 0.12 * w);
-      const px = (rr, off) => [Math.cos(a) * rr - Math.sin(a) * off, Math.sin(a) * rr + Math.cos(a) * off];
-      const p0 = px(r1, 0), pm = px(r2, w * R * 0.3), p3 = px(r3, -w * R * 0.22);
-      g.moveTo(p0[0], p0[1]); g.quadraticCurveTo(pm[0], pm[1], p3[0], p3[1]);
-    }
-    g.stroke();
-  }
-
-  // the digital brain at the heart of it
-  gr = g.createRadialGradient(0, 0, 0, 0, 0, R * 0.85);
-  gr.addColorStop(0, rgba(c, 0.30 * alpha + lv * 0.2)); gr.addColorStop(1, rgba(c, 0));
-  g.fillStyle = gr; g.beginPath(); g.arc(0, 0, R * 0.85, 0, 7); g.fill();
+  // the digital brain
   brain.update(dt, st, lv);
-  brain.draw(g, 0, 0, R, t, c, Math.min(1, alpha + 0.25));
+  brain.draw(g, 0, 0, R * 0.92, t, c, Math.min(1, alpha + 0.25));
+
+  // ======== three glowing orange nodes (they swell with voice level and music) ========
+  {
+    const nr = R * 1.22, spin = t * 0.28 * (0.6 + speed * 0.5), pw = 1 + Math.max(lv, bass * 0.6) * 1.2;
+    const pts = [0, 1, 2].map((i) => [Math.cos(spin + i * 2.094) * nr, Math.sin(spin + i * 2.094) * nr]);
+    g.strokeStyle = rgba(GOLD, 0.45 * alpha); g.lineWidth = 1; g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); g.stroke();
+    pts.forEach(([x, y]) => {
+      const hr = R * 0.34 * pw, hg = g.createRadialGradient(x, y, 0, x, y, hr);
+      hg.addColorStop(0, rgba(GOLD, 0.95)); hg.addColorStop(0.35, rgba(GOLD, 0.45 * alpha)); hg.addColorStop(1, rgba(GOLD, 0));
+      g.fillStyle = hg; g.beginPath(); g.arc(x, y, hr, 0, TAU); g.fill();
+      g.fillStyle = '#fff3e0'; g.beginPath(); g.arc(x, y, R * 0.045, 0, TAU); g.fill();
+    });
+  }
 
   // thinking: orbiting dots
   if (st === 'thinking') {
     g.fillStyle = rgba(c, 0.95);
-    for (let i = 0; i < 3; i++) { const a = t * 4 + i * 2.094; g.beginPath(); g.arc(Math.cos(a) * R * 2.0, Math.sin(a) * R * 2.0, 4 - cm * 1.5, 0, 7); g.fill(); }
+    for (let i = 0; i < 3; i++) { const a = t * 4 + i * 2.094; g.beginPath(); g.arc(Math.cos(a) * R * 1.95, Math.sin(a) * R * 1.95, 4 - cm * 1.5, 0, 7); g.fill(); }
+  }
+
+  // data chips on the rim (big, readable)
+  if (cm < 0.6 && q > 0) {
+    const sT2 = S.stats, d = new Date(), pad = (n) => String(n).padStart(2, '0'), h12 = d.getHours() % 12 || 12;
+    const chips = [[-2.356, 'CPU ' + (sT2 ? Math.round(sT2.cpu) + '%' : '--')], [-0.785, 'MEM ' + (sT2 ? Math.round(sT2.mem) + '%' : '--')],
+      [2.356, 'NET ' + (sT2 ? fmtRate(sT2.net_down || 0) : '--')], [0.785, h12 + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()) + (d.getHours() < 12 ? ' AM' : ' PM')]];
+    g.font = `bold ${Math.max(11, R * 0.21)}px Consolas, monospace`; g.textAlign = 'center'; g.shadowColor = 'rgba(0,0,0,.9)'; g.shadowBlur = 5;
+    g.fillStyle = rgba(ROSE, (1 - cm) * alpha);
+    for (const [a, s] of chips) g.fillText(s, Math.cos(a) * R * 2.45, Math.sin(a) * R * 2.45 + 4);
+    g.shadowBlur = 0;
   }
   g.restore();
 }
