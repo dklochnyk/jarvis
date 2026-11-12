@@ -229,21 +229,32 @@ function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
 
   // glow
   let gr = g.createRadialGradient(0, 0, 0, 0, 0, R * 3.2 * pulse);
-  gr.addColorStop(0, rgba(c, 0.28 * alpha)); gr.addColorStop(0.4, rgba(c, 0.09 * alpha)); gr.addColorStop(1, rgba(c, 0));
+  gr.addColorStop(0, rgba(c, 0.42 * alpha)); gr.addColorStop(0.4, rgba(c, 0.15 * alpha)); gr.addColorStop(1, rgba(c, 0));
   g.fillStyle = gr; g.beginPath(); g.arc(0, 0, R * 3.2 * pulse, 0, 7); g.fill();
 
   g.globalAlpha = 1 - 0.92 * cm;   // the rigid instrument layer fades out when the core is small; the free-form waves stay
+  // bold glowing border: double rim ring plus corner brackets framing the whole core
+  if (cm < 0.9) {
+    g.shadowColor = rgba(c, 1); g.shadowBlur = 16; g.strokeStyle = rgba(c, alpha); g.lineWidth = 4;
+    g.beginPath(); g.arc(0, 0, R * 3.05, 0, 6.2832); g.stroke();
+    g.shadowBlur = 8; g.lineWidth = 1.6; g.strokeStyle = rgba(GOLD, 0.95 * alpha);
+    g.beginPath(); g.arc(0, 0, R * 3.14, 0, 6.2832); g.stroke();
+    g.shadowBlur = 12; g.lineWidth = 4; g.strokeStyle = rgba(c, alpha); g.beginPath();
+    const bk = R * 3.38, bl = R * 0.55;
+    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { g.moveTo(sx * bk, sy * (bk - bl)); g.lineTo(sx * bk, sy * bk); g.lineTo(sx * (bk - bl), sy * bk); }
+    g.stroke(); g.shadowBlur = 0;
+  }
   // outer instrument rings: coarse ticks, fine ticks (counter-rotating), dashed guide
   g.lineWidth = 1;
-  g.save(); g.rotate(-t * 0.1); g.strokeStyle = rgba(c, 0.38 * alpha); g.stroke(tickPath(R * 2.55, 60, 9, 4, 5)); g.restore();
-  if (q > 0) { g.save(); g.rotate(t * 0.05); g.strokeStyle = rgba(c, 0.22 * alpha); g.stroke(tickPath(R * 2.4, 180, 4, 2, 15)); g.restore(); }
-  g.setLineDash([3, 7]); g.lineDashOffset = -t * 6; g.strokeStyle = rgba(c, 0.3 * alpha);
+  g.save(); g.rotate(-t * 0.1); g.strokeStyle = rgba(c, 0.75 * alpha); g.lineWidth = 1.6; g.stroke(tickPath(R * 2.55, 60, 9, 4, 5)); g.restore();
+  if (q > 0) { g.save(); g.rotate(t * 0.05); g.strokeStyle = rgba(c, 0.45 * alpha); g.stroke(tickPath(R * 2.4, 180, 4, 2, 15)); g.restore(); }
+  g.setLineDash([3, 7]); g.lineDashOffset = -t * 6; g.strokeStyle = rgba(c, 0.6 * alpha); g.lineWidth = 1.4;
   g.beginPath(); g.arc(0, 0, R * 2.22, 0, 6.2832); g.stroke(); g.setLineDash([]);
 
   // curved name ring
   if (q > 0 && cm < 0.6) {
     const fs = Math.max(8, R * 0.2), rr = R * 2.8, n = RING_TEXT.length, step = 6.2832 / n;
-    g.font = `${fs}px Consolas, monospace`; g.textAlign = 'center'; g.fillStyle = rgba(c, 0.6 * alpha * (1 - cm));
+    g.font = `bold ${fs}px Consolas, monospace`; g.textAlign = 'center'; g.fillStyle = rgba(c, 0.95 * alpha * (1 - cm));
     g.save(); g.rotate(t * 0.04);
     for (let i = 0; i < n; i++) { const ch = RING_TEXT[i]; if (ch === ' ') { g.rotate(step); continue; } g.save(); g.translate(0, -rr); g.fillText(ch, 0, 0); g.restore(); g.rotate(step); }
     g.restore();
@@ -260,13 +271,13 @@ function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
     const want = (st === 'listening' || st === 'speaking') ? lv * wob : 0.04 + 0.03 * Math.sin(t * 2 + i);
     bars[i] += (want - bars[i]) * 0.4; sum += bars[i];
   }
-  g.strokeStyle = rgba(c, Math.min(1, 0.4 + (sum / NBARS) * 2.4) * alpha); g.lineWidth = 2.2 - 0.9 * cm; g.lineCap = 'round'; g.beginPath();
+  g.strokeStyle = rgba(c, Math.min(1, 0.4 + (sum / NBARS) * 2.4) * alpha); g.lineWidth = 3.4 - 1.4 * cm; g.lineCap = 'round'; g.shadowColor = rgba(c, 0.9); g.shadowBlur = 10; g.beginPath();
   g.save(); g.rotate(t * 0.08 * speed);
   for (let i = 0; i < NBARS; i++) {
     const a = (i / NBARS) * 6.2832, r0 = R * 1.55, r1 = r0 + 6 + bars[i] * R * 1.1, ca = Math.cos(a), sa = Math.sin(a);
     g.moveTo(ca * r0, sa * r0); g.lineTo(ca * r1, sa * r1);
   }
-  g.stroke(); g.restore(); g.lineCap = 'butt';
+  g.stroke(); g.restore(); g.lineCap = 'butt'; g.shadowBlur = 0;
 
   // live system gauges as thin arcs inside the bars: CPU / GPU / MEM
   const sT = S.stats;
@@ -281,24 +292,25 @@ function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
   }
 
   // arc-reactor rings, each in its own colour
-  g.lineWidth = 2.2;
+  g.lineWidth = 4; g.shadowBlur = 12;
   [[R * 1.25, 3, 0.7, 1, c], [R * 1.05, 5, 0.55, -1.4, GOLD], [R * 0.9, 2, 0.8, 2.1, VIOLET]].forEach(([rr, segs, frac, dir, col]) => {
     const base = t * speed * dir, span = (6.2832 / segs) * frac * 0.8;
-    g.strokeStyle = rgba(col, 0.9 * alpha); g.beginPath();
+    g.strokeStyle = rgba(col, alpha); g.shadowColor = rgba(col, 0.95); g.beginPath();
     for (let s = 0; s < segs; s++) { const a0 = base + (s / segs) * 6.2832; g.moveTo(Math.cos(a0) * rr, Math.sin(a0) * rr); g.arc(0, 0, rr, a0, a0 + span); }
     g.stroke();
   });
+  g.shadowBlur = 0;
 
   // segmented power ring (gold) that fills with Jarvis' voice level / activity, plus a rose scale of fine dashes
   if (q > 0) {
     const SEG = 36, lit = Math.round(Math.min(1, 0.12 + lv * 1.4 + (st === 'thinking' ? 0.4 : 0)) * SEG), rr = R * 1.88, step = 6.2832 / SEG;
-    g.lineWidth = 4; g.strokeStyle = rgba(GOLD, 0.14 * alpha); g.beginPath();
+    g.lineWidth = 6; g.strokeStyle = rgba(GOLD, 0.22 * alpha); g.beginPath();
     for (let i = lit; i < SEG; i++) { const a0 = -1.5708 + i * step; g.moveTo(Math.cos(a0 + 0.03) * rr, Math.sin(a0 + 0.03) * rr); g.arc(0, 0, rr, a0 + 0.03, a0 + step - 0.03); }
     g.stroke();
-    g.strokeStyle = rgba(GOLD, 0.9 * alpha); g.beginPath();
+    g.strokeStyle = rgba(GOLD, alpha); g.shadowColor = rgba(GOLD, 0.9); g.shadowBlur = 10; g.beginPath();
     for (let i = 0; i < lit; i++) { const a0 = -1.5708 + i * step; g.moveTo(Math.cos(a0 + 0.03) * rr, Math.sin(a0 + 0.03) * rr); g.arc(0, 0, rr, a0 + 0.03, a0 + step - 0.03); }
     g.stroke();
-    g.save(); g.rotate(t * 0.15); g.strokeStyle = rgba(ROSE, 0.45 * alpha); g.lineWidth = 1; g.stroke(tickPath(R * 2.0, 90, 5, 2.5, 9)); g.restore();
+    g.save(); g.shadowBlur = 0; g.rotate(t * 0.15); g.strokeStyle = rgba(ROSE, 0.8 * alpha); g.lineWidth = 1.5; g.stroke(tickPath(R * 2.0, 90, 5, 2.5, 9)); g.restore();
     // satellite with a fading trail on the dashed guide
     const sa = t * 0.7;
     for (let i = 0; i < 8; i++) { g.fillStyle = rgba(VIOLET, (0.9 - i * 0.11) * alpha); g.beginPath(); g.arc(Math.cos(sa - i * 0.07) * R * 2.22, Math.sin(sa - i * 0.07) * R * 2.22, 3.2 - i * 0.28, 0, 7); g.fill(); }
@@ -310,9 +322,9 @@ function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
   }
 
   // hexagon frame + radar sweep around the brain
-  g.save(); g.rotate(t * 0.12); g.strokeStyle = rgba(ROSE, 0.5 * alpha); g.lineWidth = 1.2; g.beginPath();
+  g.save(); g.rotate(t * 0.12); g.strokeStyle = rgba(ROSE, 0.95 * alpha); g.lineWidth = 2.4; g.shadowColor = rgba(ROSE, 0.9); g.shadowBlur = 10; g.beginPath();
   for (let i = 0; i <= 6; i++) { const a = (i / 6) * 6.2832, x = Math.cos(a) * R * 0.98, y = Math.sin(a) * R * 0.98; i ? g.lineTo(x, y) : g.moveTo(x, y); }
-  g.stroke(); g.restore();
+  g.stroke(); g.restore(); g.shadowBlur = 0;
   if (q > 0 && g.createConicGradient) {
     const sw = g.createConicGradient(t * (st === 'thinking' ? 4 : 1.1), 0, 0);
     sw.addColorStop(0, rgba(c, 0)); sw.addColorStop(0.9, rgba(c, 0)); sw.addColorStop(1, rgba(c, 0.32 * alpha));
@@ -332,19 +344,19 @@ function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
   if (cm < 0.7) {
     const fa = alpha * (1 - cm), TAU = 6.2832;
     // faint concentric guide circles
-    g.lineWidth = 1; g.strokeStyle = rgba(c, 0.12 * fa); g.beginPath();
+    g.lineWidth = 1; g.strokeStyle = rgba(c, 0.28 * fa); g.beginPath();
     for (const k of [1.15, 1.35, 1.7, 2.1, 2.95]) { g.moveTo(R * k, 0); g.arc(0, 0, R * k, 0, TAU); }
     g.stroke();
     // targeting brackets on the outer rim
-    g.lineWidth = 2.2; g.strokeStyle = rgba(c, 0.75 * fa); g.beginPath();
+    g.lineWidth = 4.5; g.strokeStyle = rgba(c, fa); g.shadowColor = rgba(c, 0.95); g.shadowBlur = 12; g.beginPath();
     for (let i = 0; i < 4; i++) { const a0 = i * TAU / 4 + 0.785 - 0.2; g.moveTo(Math.cos(a0) * R * 2.95, Math.sin(a0) * R * 2.95); g.arc(0, 0, R * 2.95, a0, a0 + 0.4); }
-    g.stroke();
+    g.stroke(); g.shadowBlur = 0;
     // ring of small hexagon cells (violet), turning slowly
-    g.save(); g.rotate(-t * 0.07); g.strokeStyle = rgba(VIOLET, 0.5 * fa); g.lineWidth = 1; g.stroke(hexRing(R * 1.72, 24, R * 0.085)); g.restore();
+    g.save(); g.rotate(-t * 0.07); g.strokeStyle = rgba(VIOLET, 0.95 * fa); g.lineWidth = 1.8; g.stroke(hexRing(R * 1.72, 24, R * 0.085)); g.restore();
     // scrolling data ring (gold hex stream) between the scales
     if (q > 0) {
       const n = 56, step = TAU / n, fs = Math.max(6, R * 0.11), seed = Math.floor(t * 2);
-      g.font = `${fs}px Consolas, monospace`; g.textAlign = 'center'; g.fillStyle = rgba(GOLD, 0.55 * fa);
+      g.font = `${fs}px Consolas, monospace`; g.textAlign = 'center'; g.fillStyle = rgba(GOLD, 0.9 * fa);
       g.save(); g.rotate(t * 0.09);
       for (let i = 0; i < n; i++) { g.save(); g.translate(0, -R * 2.3); g.fillText('0123456789ABCDEF'[((i * 7 + i * i + (i % 5 === 0 ? seed : 0)) & 15)], 0, 0); g.restore(); g.rotate(step); }
       g.restore();
@@ -375,11 +387,12 @@ function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
       const sT2 = S.stats, d = new Date(), pad = (n) => String(n).padStart(2, '0');
       const chips = [[-2.356, 'CPU ' + (sT2 ? Math.round(sT2.cpu) + '%' : '--')], [-0.785, 'MEM ' + (sT2 ? Math.round(sT2.mem) + '%' : '--')],
         [2.356, 'NET ' + (sT2 ? fmtRate(sT2.net_down || 0) : '--')], [0.785, pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds())]];
-      g.font = `${Math.max(7, R * 0.13)}px Consolas, monospace`; g.textAlign = 'center';
+      g.font = `bold ${Math.max(8, R * 0.14)}px Consolas, monospace`; g.textAlign = 'center'; g.shadowColor = 'rgba(0,0,0,.8)'; g.shadowBlur = 2;
       for (const [a, s] of chips) {
         const x = Math.cos(a) * R * 2.62, y = Math.sin(a) * R * 2.62;
-        g.fillStyle = rgba(GOLD, 0.85 * fa); g.fillText(s, x, y + 3);
+        g.fillStyle = rgba(GOLD, fa); g.fillText(s, x, y + 3);
       }
+      g.shadowBlur = 0;
     }
   }
 
@@ -389,15 +402,15 @@ function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
     const TAU = 6.2832, fw = 0.55 + 0.45 * cm;
     for (let i = 0; i < 3; i++) {
       const a = t * (0.25 + i * 0.08) + i * 2.1, bx = Math.cos(a) * R * 0.75, by = Math.sin(a * 1.2) * R * 0.75, col = [c, GOLD, VIOLET][i];
-      const bg = g.createRadialGradient(bx, by, 0, bx, by, R * 1.5); bg.addColorStop(0, rgba(col, 0.2 * alpha)); bg.addColorStop(1, rgba(col, 0));
+      const bg = g.createRadialGradient(bx, by, 0, bx, by, R * 1.5); bg.addColorStop(0, rgba(col, 0.34 * alpha)); bg.addColorStop(1, rgba(col, 0));
       g.fillStyle = bg; g.beginPath(); g.arc(bx, by, R * 1.5, 0, TAU); g.fill();
     }
     const P = q > 0 ? 120 : 64, amp = 1 + lv * 3.2;
     const rings = [[1.32, c, 0.7, 5, 0.9], [1.58, GOLD, 0.55, 7, -0.7], [1.86, VIOLET, 0.6, 4, 0.55], [2.12, ROSE, 0.5, 9, -0.45], [2.42, c, 0.4, 6, 0.3], [2.7, GOLD, 0.3, 11, -0.25]];
-    g.lineWidth = 1.6; g.lineJoin = 'round';
+    g.lineWidth = 2.6; g.lineJoin = 'round'; g.shadowBlur = 8;
     rings.forEach(([k, col, a, n, sp], ri) => {
       if (cm > 0.5 && ri > 3) return;
-      g.strokeStyle = rgba(col, a * alpha * fw); g.beginPath();
+      g.strokeStyle = rgba(col, Math.min(1, a * 1.5) * alpha * fw); g.shadowColor = rgba(col, 0.9); g.beginPath();
       for (let i = 0; i <= P; i++) {
         const th = (i / P) * TAU, rr = R * k + R * 0.05 * amp * Math.sin(n * th + t * sp * 2.4) + R * 0.03 * amp * Math.sin((n + 3) * th - t * sp * 1.7 + ri);
         i ? g.lineTo(Math.cos(th) * rr, Math.sin(th) * rr) : g.moveTo(Math.cos(th) * rr, Math.sin(th) * rr);
@@ -405,7 +418,7 @@ function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
       g.stroke();
     });
     // tendrils drifting outward
-    g.lineWidth = 1.2; g.strokeStyle = rgba(c, 0.3 * alpha * fw); g.beginPath();
+    g.shadowBlur = 0; g.lineWidth = 1.8; g.strokeStyle = rgba(c, 0.55 * alpha * fw); g.beginPath();
     const nt = q > 0 ? 18 : 10;
     for (let i = 0; i < nt; i++) {
       const a = (i / nt) * TAU + t * 0.05, w = Math.sin(t * 1.3 + i * 1.7), r1 = R * 1.15, r2 = R * (1.7 + 0.1 * Math.sin(t + i)), r3 = R * (2.35 + lv * 0.7 + 0.12 * w);
@@ -472,7 +485,7 @@ function frame(ms) {
   placeFollowers(cx, cy, R, sc0);
 
   const speed = st === 'thinking' ? 3.2 : st === 'listening' ? 1.2 : 0.55;
-  const alpha = 0.6 + 0.4 * Math.max(k, st === 'loading' ? 0.6 : 0);
+  const alpha = 0.88 + 0.12 * Math.max(k, st === 'loading' ? 0.6 : 0);
   drawCore(R, t, dt, st, lv, c, alpha, cm, speed);
 
   requestAnimationFrame(frame);
