@@ -129,33 +129,24 @@ Wake word and speech-to-text run on your machine. Only the text of what you say 
 ## Voice speed and HUD layout
 
 - Speech speed: in `settings.yaml` set `tts: piper: speed: 1.25` (1.0 = normal, 1.1-1.3 = snappier). `expressiveness` and `rhythm` make the voice more or less varied.
-- When any window is open, the orb shrinks into the bottom-right corner and the clock, name badge, stats and log hide wherever a window covers them. With a clear desktop it stays large.
 - To make certain programs not count as "a window is open", add them under `hud: ignore_apps: [spotify]` in `settings.yaml`.
 
-## Command-center HUD
+## The HUD (lean version)
 
-- **Move the visualizer:** hold the RIGHT mouse button on it and drag it anywhere (over other windows too). It remembers where you left it. Middle-click it, or use the tray menu, to put it back.
-- **Move and resize anything:** every panel, the brain and the core can be moved with RIGHT-drag, and resized by holding the RIGHT button and scrolling the wheel. Middle-click a panel to put it back; tray menu > Reset layout resets everything. Positions are remembered. If panels get in the way of clicking your desktop, tray menu > Lock / unlock panels makes them click-through again.
-- **Microphone not working:** run `mic-test.bat` (speak while it runs). It tries every microphone and tells you which `mic_device` number to put in `settings.yaml`.
-- **Type to Jarvis:** the terminal panel has a prompt line. Click it (or press Ctrl+Alt+T), type, press Enter. Esc cancels. Handy when the mic isn't working. The terminal also warns when no audio is coming from the microphone.
-- **Terminal panel:** a live mirror of the console window (errors in red, warnings in yellow, with an error count) so you can see problems without the black window.
-- **Using less CPU:** tray menu > *Visual quality* (Low 20 fps / Medium 30 fps / High 45 fps; default Medium). Low also draws at reduced resolution and simplifies the brain. The HUD draws less when idle and almost nothing while hidden (Ctrl+Alt+H). If your CPU is still high, check Task Manager: if it is *python*, try `stt: model: base.en` in `settings.yaml`.
-- **Keyboard shortcuts:** Ctrl+Alt+J talk, Ctrl+Alt+H show/hide the HUD, Ctrl+Alt+T type a command, Ctrl+Alt+Q cycle visual quality (low/medium/high, shown in the HUD log), Ctrl+Alt+R reset the layout, Ctrl+Alt+S span all screens on/off. The tray icon may be hidden behind the ^ arrow next to the clock.
-- **Multiple screens:** tray menu > *Main screen* picks which monitor hosts the main stage (brain, player, core). Tray menu > *Span all screens* stretches the overlay across every monitor so you can right-drag any panel, the brain or the core onto another screen. Only windows on the main screen switch the HUD to its small layout; panels hide when a window covers them on whichever screen they are on. Changing screens resets the layout.
-- **Talk to it:** press and HOLD the LEFT mouse button on the visualizer, speak, and let go. Pressing it while Jarvis is talking cuts him off first. A quick tap only interrupts.
-- **Quick-launch tiles:** the dock on the left. Click a tile to open that app, folder or website. Make your own list in `settings.yaml`:
+Three things on screen, nothing else:
 
-```yaml
-launcher:
-  - {name: Chrome,   icon: "🌐", app: chrome}
-  - {name: Bids,     icon: "📐", path: "C:\\Users\\you\\Documents\\Bids"}
-  - {name: Outlook,  icon: "✉",  url: "https://outlook.office.com"}
-```
-  Each tile needs a `name` plus one of `app:`, `path:` or `url:`. `icon` is optional (any emoji). Your list replaces the default one.
-- **Performance hub:** CPU, memory and disk gauges, 60-second load and network charts, per-core bars and the top programs.
-- **Neural core:** the brain in the middle fires faster while Jarvis is thinking and pulses with his voice.
+- **Jarvis core** (bottom-right of the main screen): the digital brain inside a detailed instrument ring (tick scales, rotating arc-reactor rings, radar sweep, radial audio bars, a curved name ring, and live CPU / GPU / memory arcs). It reacts to listening, thinking and speaking.
+- **Performance hub** (top-right): CPU, GPU, memory and disk gauges, a CPU+GPU load chart, memory chart, network chart and per-core bars. GPU load comes from Windows' GPU counters (any vendor).
+- **Spotify player** (bottom-left): album art in a spinning spectrum ring, prev/play/next, progress and a live spectrum of whatever your PC plays (needs `spotify-login.bat` once).
 
-- **Center stage:** on a clear desktop the main screen is free-form (no boxes) around a big anatomical digital brain. Its regions light up as Jarvis listens, thinks, plans, acts and speaks. The movable Jarvis core sits in the bottom-right corner; drag it with the right mouse button as before.
-- **Spotify player:** with no windows open, a now-playing player (art, title, prev/play/next, progress) sits under the brain with a live spectrum of whatever your PC is playing (needs `spotify-login.bat` done once; falls back to a simulated spectrum if audio capture is unavailable).
-- **With a window open:** everything shrinks to a small core in the corner and panels get out of the way.
-- **Diagnostics, process radar, status bar:** live model/provider/voice/app status, a radar of your busiest programs, and a bar showing Listening / Thinking / Planning / Executing / Responding. They tuck away when a window is open.
+Window behaviour is per screen: when a window is open on a monitor, the panels on *that* monitor hide and the core there shrinks to a small icon. Windows on your other monitors change nothing.
+
+- **Move / resize:** RIGHT-drag any of the three; hold RIGHT and scroll to resize; middle-click to reset. Positions are remembered; Ctrl+Alt+R resets everything. Tray menu > *Lock / unlock panels* makes them click-through.
+- **Talk to it:** press and HOLD the LEFT mouse button on the core, speak, let go. Pressing while Jarvis talks cuts him off.
+- **Type to Jarvis:** press Ctrl+Alt+T (a small terminal appears), type, Enter. It also appears by itself, with the console output, when an error happens.
+- **Microphone not working:** run `mic-test.bat` while speaking. It tells you which `mic_device` number to put in `settings.yaml`.
+- **Using less CPU/GPU:** tray menu > *Visual quality* (Low / Medium / High, default Medium) or Ctrl+Alt+Q. Everything draws on small canvases at low frame rates, and panels only redraw while visible. If CPU is still high, check Task Manager: if it is *python*, try `stt: model: base.en`.
+- **Multiple screens:** tray menu > *Main screen* picks the monitor for the core, hub and player. *Span all screens* lets you right-drag any of them onto another monitor. Changing screens resets the layout.
+- **Shortcuts:** Ctrl+Alt+J talk, H hide/show, T type, Q quality, R reset layout, S span screens. The tray icon may be behind the ^ arrow near the clock.
+
+The launcher tiles, clock, diagnostics, process radar, timers panel, status bar, big brain scene and animated background were removed to save CPU/GPU. They are all in git history if you ever want them back.

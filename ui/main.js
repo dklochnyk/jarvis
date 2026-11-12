@@ -54,8 +54,14 @@ function placeWindow(changed = false) {
   const hb = home.bounds;
   const homeRel = { x: hb.x - b.x, y: hb.y - b.y, w: hb.width, h: Math.min(hb.height, bounds.y + bounds.height - hb.y) };
   win.webContents.send('quality', screenCfg.quality);
+  const shown = screenCfg.span ? screen.getAllDisplays() : [home];
+  const displays = shown.map((d) => {
+    const r = { x: d.bounds.x, y: d.bounds.y, width: d.bounds.width, height: Math.min(d.bounds.height, bounds.y + bounds.height - d.bounds.y) };
+    return { x: r.x - b.x, y: r.y - b.y, w: r.width, h: r.height, phys: physRect(r) };
+  });
   win.webContents.send('screens', {
     changed,
+    displays,
     home: homeRel,
     phys: { win: physRect(bounds), home: physRect({ x: hb.x, y: hb.y, width: hb.width, height: homeRel.h }) },
   });

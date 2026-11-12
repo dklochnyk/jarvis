@@ -1,8 +1,64 @@
 """Live system numbers for the HUD's performance hub."""
+import csv
 import os
+import re
+import subprocess
+import threading
 import time
 
 import psutil
+
+
+class GpuMeter(threading.Thread):
+    """GPU load (%) from Windows' own performance counters, any vendor. One long-lived `typeperf`, restarted now and
+    then so new processes get picked up. value stays None if the counters aren't available."""
+
+    def __init__(self):
+        super().__init__(daemon=True)
+        self.value = None
+
+    def run(self):
+        if os.name != "nt":
+            return
+        while True:
+            try:
+                self._session(120)
+            except Exception:
+                self.value = None
+                time.sleep(30)
+
+    def _session(self, seconds):
+        p = subprocess.Popen(
+            ["typeperf", r"\GPU Engine(*)\Utilization Percentage", "-si", "2"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, creationflags=0x08000000,
+        )
+        threading.Timer(seconds, p.kill).start()
+        names, got = None, False
+        for line in p.stdout:
+            line = line.strip()
+            if not line.startswith('"'):
+                continue
+            row = next(csv.reader([line]))
+            if row[0].startswith("(PDH"):
+                names = row
+                continue
+            if not names or len(row) != len(names):
+                continue
+            sums = {}
+            for name, val in zip(names[1:], row[1:]):
+                m = re.search(r"luid_(\w+_\w+)_phys_\d+_eng_\d+_engtype_(\w+)", name)
+                if not m:
+                    continue
+                try:
+                    sums[m.groups()] = sums.get(m.groups(), 0.0) + float(val)
+                except ValueError:
+                    pass
+            if sums:
+                self.value = round(min(100.0, max(sums.values())), 1)
+                got = True
+        p.wait()
+        if not got:
+            time.sleep(60)
 
 
 class Sampler:
@@ -11,37 +67,10 @@ class Sampler:
         self.net = psutil.net_io_counters()
         self.t = time.time()
         self.n = 0
-        self.procs = []
-        self._cache = {}
+        self.gpu = GpuMeter()
+        self.gpu.start()
         self.started = time.time()
-        self.ncpu = psutil.cpu_count() or 1
         self.disk_path = os.environ.get("SystemDrive", "C:") + "\\" if os.name == "nt" else "/"
-
-    def _top_processes(self):
-        seen, totals = set(), {}
-        for p in psutil.process_iter(["pid", "name"]):
-            pid = p.info["pid"]
-            seen.add(pid)
-            proc = self._cache.get(pid)
-            if proc is None:
-                proc = self._cache[pid] = p
-                try:
-                    proc.cpu_percent(None)  # prime; real value next time
-                except psutil.Error:
-                    pass
-                continue
-            try:
-                name = (p.info["name"] or "?").removesuffix(".exe")
-                if name.lower() in ("system idle process", "idle"):
-                    continue
-                totals[name] = totals.get(name, 0.0) + proc.cpu_percent(None) / self.ncpu
-            except psutil.Error:
-                continue
-        for pid in list(self._cache):
-            if pid not in seen:
-                del self._cache[pid]
-        top = sorted(totals.items(), key=lambda kv: -kv[1])[:8]
-        return [[n, round(v, 1)] for n, v in top]
 
     def sample(self):
         now = time.time()
@@ -61,11 +90,6 @@ class Sampler:
         bat = psutil.sensors_battery() if hasattr(psutil, "sensors_battery") else None
 
         self.n += 1
-        if self.n % 3 == 1:
-            try:
-                self.procs = self._top_processes()
-            except Exception:
-                pass
         return {
             "cpu": round(sum(cores) / max(1, len(cores)), 1),
             "cores": [round(c) for c in cores],
@@ -81,5 +105,5 @@ class Sampler:
             "plugged": bool(bat.power_plugged) if bat else None,
             "uptime": int(now - psutil.boot_time()),
             "jarvis_up": int(now - self.started),
-            "procs": self.procs,
+            "gpu": self.gpu.value,
         }
