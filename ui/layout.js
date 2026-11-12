@@ -18,7 +18,7 @@
   // Where the orb lives. c = 0 (no windows) .. 1 (windows open); k = 0 idle .. 1 active.
   // pin = {x, y} as screen fractions when the user has dragged it somewhere (then it never drifts).
   const orb = (W, H, c, k, pin) => {
-    const big = { x: W - 135, y: H - 175, R: 44 + 14 * k };   // the core lives in the bottom-right corner
+    const big = { x: W - 190, y: H - 230, R: 66 + 18 * k };   // the core lives in the bottom-right corner
     const small = { x: W - 80, y: H - 120, R: 22 + 8 * k };
     const R = big.R + (small.R - big.R) * c;
     let x = big.x + (small.x - big.x) * c, y = big.y + (small.y - big.y) * c;

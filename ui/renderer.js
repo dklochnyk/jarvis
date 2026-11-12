@@ -32,7 +32,7 @@ function setPin(p) {
   try { p ? localStorage.setItem('jarvis.orbpin', JSON.stringify(p)) : localStorage.removeItem('jarvis.orbpin'); } catch (e) { /* storage unavailable: fine */ }
 }
 
-const S = { sp: null, spec: new Array(40).fill(0), specAt: 0, specShown: new Array(40).fill(0), exec: false, planned: false,
+const S = { exec: false, planned: false,
             compact: 0, state: 'loading', followup: false, level: 0, target: 0, prom: 0, hold: 0,
             color: [...COLORS.loading], t: 0, pin: loadPin(), stats: null,
             screens: [], busy: [], anyWin: false, legacyWins: [], rects: null, phys: null };
@@ -72,9 +72,7 @@ function handle(m) {
     case 'term': termLine(m.text, m.err); break;
     case 'termbuf': $('tlines').replaceChildren(); (m.lines || []).forEach((l) => termLine(l.text, l.err, true)); break;
     case 'desktop': S.legacyWins = m.windows || []; S.rects = m.rects || null; recomputeBusy(); updateCovered(); break;
-    case 'spotify': S.sp = { ...m, at: Date.now() }; updatePlayer(true); break;
-    case 'spectrum': S.spec = m.bands || S.spec; S.specAt = Date.now(); break;
-    case 'stats': S.stats = m; Perf.update(m); Perf.text({ up: $('up'), bat: $('bat') }); break;
+        case 'stats': S.stats = m; break;
   }
 }
 
@@ -105,13 +103,7 @@ function busyAt(x, y) {
   const i = screenAt(x, y);
   return i < 0 ? S.anyWin : !!S.busy[i];
 }
-const PANELS = ['perf-cpu', 'perf-mem', 'perf-net', 'player'];
 function updateCovered() {
-  for (const id of PANELS) {
-    const el = $(id), r = el.getBoundingClientRect();
-    if (!r.width || !r.height) continue;
-    el.classList.toggle('covered', busyAt((r.left + r.right) / 2, (r.top + r.bottom) / 2));
-  }
   const o = orbNow;
   $('corner').classList.toggle('covered', busyAt(o.x, o.y) && !S.pin);
 }
@@ -128,14 +120,14 @@ function applyHome() {
 }
 // Visual quality: 0 low / 1 medium / 2 high. Sets frame rates and drawing resolution (the big CPU/GPU costs).
 let QUALITY = 1;
-const FPS_IDLE = [6, 10, 15], FPS_ACTIVE = [15, 24, 36], PERF_MS = [500, 250, 150];
+const FPS_IDLE = [6, 10, 15], FPS_ACTIVE = [15, 24, 36];
 function renderScale() {
   const dpr = window.devicePixelRatio || 1;
   return QUALITY === 0 ? Math.min(dpr, 1) * 0.75 : QUALITY === 1 ? Math.min(dpr, 1.25) : Math.min(dpr, 1.75);
 }
 let canvasSide = 0, canvasSc = 0;
 function sizeCoreCanvas() {
-  const side = Math.ceil(58 * 7 * uiScale('orb')), sc = renderScale();
+  const side = Math.ceil(84 * 7 * uiScale('orb')), sc = renderScale();
   if (side === canvasSide && sc === canvasSc) return;
   canvasSide = side; canvasSc = sc;
   cv.style.width = cv.style.height = side + 'px';
@@ -162,46 +154,7 @@ const brain = new BrainViz.Brain(7);
 const orbNow = { x: 0, y: 0, R: 40 };
 let frameNo = 0;
 
-// the audio spectrum: real (from the backend's loopback capture) or simulated while a song is playing
-function updateSpectrum(t) {
-  const live = Date.now() - S.specAt < 2500, playing = !!(S.sp && S.sp.playing);
-  const beat = Math.pow(Math.max(0, Math.sin(t * 3.9)), 3);
-  for (let i = 0; i < 40; i++) {
-    let want;
-    if (live) want = (S.spec[i] || 0) / 100;
-    else if (playing) want = 0.55 * Math.exp(-i / 24) * (0.3 + 0.7 * Math.abs(Math.sin(t * (1.6 + i * 0.17) + i * 1.3))) * (0.55 + 0.6 * beat);
-    else want = 0.02;
-    S.specShown[i] += (want - S.specShown[i]) * (want > S.specShown[i] ? 0.5 : 0.18);
-  }
-}
-
-// ---------- spotify player ----------
-const fmtT = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
-const PLAY = 'M8 5v14l11-7z', PAUSE = 'M7 5h4v14H7zM13 5h4v14h-4z';
-let lastArt = null;
-function updatePlayer(full) {
-  const sp = S.sp, box = $('player');
-  if (!sp) return;
-  box.classList.toggle('off', !sp.ok);
-  if (full || sp.ok === false) {
-    if (!sp.ok) { $('pl-label').textContent = 'SPOTIFY · NOT LINKED'; $('pl-title').textContent = 'Spotify is not connected'; $('pl-artist').textContent = 'Run spotify-login.bat once to link it'; }
-    else if (!sp.title) { $('pl-label').textContent = 'SPOTIFY · IDLE'; $('pl-title').textContent = 'Nothing playing'; $('pl-artist').textContent = 'Say “Jarvis, play something”'; }
-    else { $('pl-label').textContent = sp.playing ? 'SPOTIFY · NOW PLAYING' : 'SPOTIFY · PAUSED'; $('pl-title').textContent = sp.title; $('pl-artist').textContent = sp.artist + (sp.album ? ' — ' + sp.album : ''); }
-    if (sp.art !== lastArt) { lastArt = sp.art; const im = $('pl-img'); if (sp.art) { im.style.visibility = 'visible'; im.src = sp.art; } else { im.style.visibility = 'hidden'; } }
-  }
-  $('pl-pp').innerHTML = '<path d="' + (sp.playing ? PAUSE : PLAY) + '"/>';
-  const dur = sp.duration_ms || 0, prog = Math.min(dur, (sp.progress_ms || 0) + (sp.playing ? Date.now() - sp.at : 0));
-  $('pl-fill').style.width = dur ? (prog / dur) * 100 + '%' : '0%';
-  $('pl-t0').textContent = fmtT(prog); $('pl-t1').textContent = fmtT(dur);
-}
-setInterval(() => { if (!$('player').classList.contains('covered')) updatePlayer(false); }, 500);
-document.addEventListener('click', (e) => {
-  const b = e.target.closest && e.target.closest('.pbtn');
-  if (!b) return;
-  const a = b.dataset.a;
-  if (a === 'play_pause' && S.sp) { S.sp.progress_ms = (S.sp.progress_ms || 0) + (S.sp.playing ? Date.now() - S.sp.at : 0); S.sp.at = Date.now(); S.sp.playing = !S.sp.playing; updatePlayer(true); }
-  send({ type: 'spotify', action: a });
-});
+const fmtRate = (kb) => (kb >= 1024 ? (kb / 1024).toFixed(1) + 'M' : Math.round(kb) + 'K');
 
 function placeFollowers(cx, cy, R) {   // window coordinates
   const f = Layout.followers(cx, cy, R, CW, CH);
@@ -225,6 +178,30 @@ function tickPath(r, n, long, short, every) {
     p.moveTo(ca * r, sa * r); p.lineTo(ca * r1, sa * r1);
   }
   const keys = Object.keys(pathCache); if (keys.length > 40) delete pathCache[keys[0]];
+  return (pathCache[key] = p);
+}
+
+// cached shapes for the extra detail
+function hexRing(r, n, size) {
+  const key = 'hex' + r.toFixed(1) + n + size.toFixed(1);
+  if (pathCache[key]) return pathCache[key];
+  const p = new Path2D();
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * 6.2832, cx = Math.cos(a) * r, cy = Math.sin(a) * r;
+    for (let k = 0; k <= 6; k++) { const b = a + (k / 6) * 6.2832, x = cx + Math.cos(b) * size, y = cy + Math.sin(b) * size; k ? p.lineTo(x, y) : p.moveTo(x, y); }
+  }
+  return (pathCache[key] = p);
+}
+function circuitPath(R) {
+  const key = 'ckt' + R.toFixed(1);
+  if (pathCache[key]) return pathCache[key];
+  const p = new Path2D();
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * 6.2832, ca = Math.cos(a), sa = Math.sin(a), r0 = R * 0.62, r1 = R * (0.72 + (i % 3) * 0.05), r2 = R * 0.9, j = (i % 2 ? 1 : -1) * 0.09;
+    p.moveTo(ca * r0, sa * r0); p.lineTo(ca * r1, sa * r1);
+    const b = a + j; p.lineTo(Math.cos(b) * r1, Math.sin(b) * r1); p.lineTo(Math.cos(b) * r2, Math.sin(b) * r2);
+    p.moveTo(Math.cos(b) * r2 + 2, Math.sin(b) * r2); p.arc(Math.cos(b) * r2, Math.sin(b) * r2, 2, 0, 6.2832);
+  }
   return (pathCache[key] = p);
 }
 const GOLD = [255, 190, 80], VIOLET = [190, 125, 255], ROSE = [255, 105, 170];
@@ -337,6 +314,61 @@ function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
     }
   }
 
+  // ---- extra detail: only when the core is big enough to show it ----
+  if (cm < 0.7) {
+    const fa = alpha * (1 - cm), TAU = 6.2832;
+    // faint concentric guide circles
+    g.lineWidth = 1; g.strokeStyle = rgba(c, 0.12 * fa); g.beginPath();
+    for (const k of [1.15, 1.35, 1.7, 2.1, 2.95]) { g.moveTo(R * k, 0); g.arc(0, 0, R * k, 0, TAU); }
+    g.stroke();
+    // targeting brackets on the outer rim
+    g.lineWidth = 2.2; g.strokeStyle = rgba(c, 0.75 * fa); g.beginPath();
+    for (let i = 0; i < 4; i++) { const a0 = i * TAU / 4 + 0.785 - 0.2; g.moveTo(Math.cos(a0) * R * 2.95, Math.sin(a0) * R * 2.95); g.arc(0, 0, R * 2.95, a0, a0 + 0.4); }
+    g.stroke();
+    // ring of small hexagon cells (violet), turning slowly
+    g.save(); g.rotate(-t * 0.07); g.strokeStyle = rgba(VIOLET, 0.5 * fa); g.lineWidth = 1; g.stroke(hexRing(R * 1.72, 24, R * 0.085)); g.restore();
+    // scrolling data ring (gold hex stream) between the scales
+    if (q > 0) {
+      const n = 56, step = TAU / n, fs = Math.max(6, R * 0.11), seed = Math.floor(t * 2);
+      g.font = `${fs}px Consolas, monospace`; g.textAlign = 'center'; g.fillStyle = rgba(GOLD, 0.55 * fa);
+      g.save(); g.rotate(t * 0.09);
+      for (let i = 0; i < n; i++) { g.save(); g.translate(0, -R * 2.3); g.fillText('0123456789ABCDEF'[((i * 7 + i * i + (i % 5 === 0 ? seed : 0)) & 15)], 0, 0); g.restore(); g.rotate(step); }
+      g.restore();
+    }
+    // network of nodes: a rotating polygon with a bright node on each corner
+    const nn = 7, na = t * 0.18, nr = R * 1.5;
+    g.strokeStyle = rgba(ROSE, 0.3 * fa); g.lineWidth = 1; g.beginPath();
+    for (let i = 0; i <= nn; i++) { const a = na + (i * 3 % nn) * TAU / nn; i ? g.lineTo(Math.cos(a) * nr, Math.sin(a) * nr) : g.moveTo(Math.cos(a) * nr, Math.sin(a) * nr); }
+    g.stroke();
+    g.fillStyle = rgba(ROSE, 0.95 * fa); g.beginPath();
+    for (let i = 0; i < nn; i++) { const a = na + i * TAU / nn; g.moveTo(Math.cos(a) * nr + 2.6, Math.sin(a) * nr); g.arc(Math.cos(a) * nr, Math.sin(a) * nr, 2.6, 0, TAU); }
+    g.fill();
+    // circuit traces inside the hexagon (violet, drifting)
+    g.save(); g.rotate(t * 0.03); g.strokeStyle = rgba(VIOLET, 0.28 * fa); g.lineWidth = 1; g.stroke(circuitPath(R)); g.restore();
+    // radar blips: they flare as the sweep passes and then fade
+    if (q > 0) {
+      const sweep = (t * (st === 'thinking' ? 4 : 1.1)) % TAU;
+      for (let i = 0; i < 7; i++) {
+        const a = (i * 2.399) % TAU, d = (0.35 + ((i * 0.37) % 0.5)) * R, since = (sweep - a + TAU) % TAU, f = Math.max(0, 1 - since / 2.4);
+        if (f <= 0.02) continue;
+        g.fillStyle = rgba(GOLD, f * 0.9 * fa); g.beginPath(); g.arc(Math.cos(a) * d, Math.sin(a) * d, 1.6 + f * 1.6, 0, TAU); g.fill();
+      }
+    }
+    // slow ripple that leaves the core every few seconds
+    const rp = (t / 3.2) % 1; g.strokeStyle = rgba(c, 0.35 * (1 - rp) * fa); g.lineWidth = 1.5; g.beginPath(); g.arc(0, 0, R * (1.2 + rp * 1.7), 0, TAU); g.stroke();
+    // data chips around the rim
+    if (q > 0) {
+      const sT2 = S.stats, d = new Date(), pad = (n) => String(n).padStart(2, '0');
+      const chips = [[-2.356, 'CPU ' + (sT2 ? Math.round(sT2.cpu) + '%' : '--')], [-0.785, 'MEM ' + (sT2 ? Math.round(sT2.mem) + '%' : '--')],
+        [2.356, 'NET ' + (sT2 ? fmtRate(sT2.net_down || 0) : '--')], [0.785, pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds())]];
+      g.font = `${Math.max(7, R * 0.13)}px Consolas, monospace`; g.textAlign = 'center';
+      for (const [a, s] of chips) {
+        const x = Math.cos(a) * R * 2.62, y = Math.sin(a) * R * 2.62;
+        g.fillStyle = rgba(GOLD, 0.85 * fa); g.fillText(s, x, y + 3);
+      }
+    }
+  }
+
   // the digital brain at the heart of it
   gr = g.createRadialGradient(0, 0, 0, 0, 0, R * 0.85);
   gr.addColorStop(0, rgba(c, 0.30 * alpha + lv * 0.2)); gr.addColorStop(1, rgba(c, 0));
@@ -352,7 +384,7 @@ function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
   g.restore();
 }
 
-let lastDraw = 0, lastPerf = 0, lastSpec = 0;
+let lastDraw = 0;
 function frame(ms) {
   const hidden = $('hud').classList.contains('hidden');
   const quiet = S.state === 'idle' && !S.followup && !pttActive;
@@ -392,20 +424,6 @@ function frame(ms) {
   const alpha = 0.6 + 0.4 * Math.max(k, st === 'loading' ? 0.6 : 0);
   drawCore(R, t, dt, st, lv, c, alpha, cm, speed);
 
-  // panels: redrawn on their own slower clock, and only while visible
-  const playOn = !$('player').classList.contains('covered');
-  if (ms - lastPerf > PERF_MS[QUALITY]) {
-    lastPerf = ms;
-    for (const k of ['cpu', 'mem', 'net']) if (!$('perf-' + k).classList.contains('covered')) Perf.draw(k, $('pfc-' + k), c, renderScale(), t);
-  }
-  if (playOn) {
-    const playing = !!(S.sp && S.sp.playing);
-    if (ms - lastSpec > (playing ? [100, 66, 40][QUALITY] : 1000)) {
-      lastSpec = ms; updateSpectrum(t);
-      Viz.radial($('pl-rad'), S.specShown, c, t, playing, renderScale());
-      Viz.bars($('pl-spec'), S.specShown, c, t, renderScale());
-    }
-  }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
@@ -447,7 +465,7 @@ tin.addEventListener('blur', () => { window.jarvis.blurInput(); setInteractive(f
 window.jarvis.onFocusInput && window.jarvis.onFocusInput(() => { $('hud').classList.remove('hidden'); showTerm(60000); setTimeout(() => tin.focus(), 90); });
 
 // ---------- movable / scalable panels (right-drag to move, right-hold + scroll to resize) ----------
-const MOVABLE = ['perf-cpu', 'perf-mem', 'perf-net', 'player', 'term'];
+const MOVABLE = ['term'];
 let UI = {};
 try { UI = JSON.parse(localStorage.getItem('jarvis.ui')) || {}; } catch (e) { UI = {}; }
 const saveUI = () => { try { localStorage.setItem('jarvis.ui', JSON.stringify(UI)); } catch (e) { /* fine */ } };

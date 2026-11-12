@@ -131,17 +131,13 @@ Wake word and speech-to-text run on your machine. Only the text of what you say 
 - Speech speed: in `settings.yaml` set `tts: piper: speed: 1.25` (1.0 = normal, 1.1-1.3 = snappier). `expressiveness` and `rhythm` make the voice more or less varied.
 - To make certain programs not count as "a window is open", add them under `hud: ignore_apps: [spotify]` in `settings.yaml`.
 
-## The HUD (lean version)
+## The HUD
 
-Five movable pieces, nothing else:
+Just the Jarvis core, bottom-right of the main screen: the digital brain inside layered rings in cyan, gold, violet and rose (tick scales, targeting brackets, hexagon cells, a scrolling hex data ring, a node network, circuit traces, a radar sweep with blips, a voice-level power ring, a satellite, ripples, and live CPU / memory / network / clock chips on the rim). It reacts to listening, thinking and speaking, and shrinks to a small icon when a window is open on its screen (windows on other monitors change nothing).
 
-- **Jarvis core** (bottom-right of the main screen): the digital brain inside a detailed instrument ring (tick scales, rotating arc-reactor rings, radar sweep, radial audio bars, a curved name ring, and live CPU / memory arcs). It reacts to listening, thinking and speaking.
-- **CPU, memory and network readouts** (top of the main screen): three separate free-floating panels, each a smooth wave that fades in and out at both ends with its own colour. Move and resize each one on its own.
-- **Spotify player** (bottom-left): album art in a spinning spectrum ring, prev/play/next, progress and a live spectrum of whatever your PC plays (needs `spotify-login.bat` once).
+The CPU/memory/network panels and the Spotify player were removed. Voice control of Spotify still works; the PC audio capture is off by default (`hud: real_spectrum`).
 
-Window behaviour is per screen: when a window is open on a monitor, the panels on *that* monitor hide and the core there shrinks to a small icon. Windows on your other monitors change nothing.
-
-- **Move / resize:** RIGHT-drag any of the three; hold RIGHT and scroll to resize; middle-click to reset. Positions are remembered; Ctrl+Alt+R resets everything. Tray menu > *Lock / unlock panels* makes them click-through.
+- **Move / resize:** RIGHT-drag the core; hold RIGHT and scroll to resize; middle-click to reset. Positions are remembered; Ctrl+Alt+R resets everything. Tray menu > *Lock / unlock panels* makes them click-through.
 - **Talk to it:** press and HOLD the LEFT mouse button on the core, speak, let go. Pressing while Jarvis talks cuts him off.
 - **Type to Jarvis:** press Ctrl+Alt+T (a small terminal appears), type, Enter. It also appears by itself, with the console output, when an error happens.
 - **Microphone not working:** run `mic-test.bat` while speaking. It tells you which `mic_device` number to put in `settings.yaml`.
