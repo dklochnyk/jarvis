@@ -134,14 +134,14 @@ function applyHome() {
 }
 // Visual quality: 0 low / 1 medium / 2 high. Sets frame rates and drawing resolution (the big CPU/GPU costs).
 let QUALITY = 1;
-const FPS_IDLE = [6, 10, 15], FPS_ACTIVE = [15, 24, 36];
+const FPS_IDLE = [6, 10, 15], FPS_ACTIVE = [20, 30, 45];
 function renderScale() {
   const dpr = window.devicePixelRatio || 1;
   return QUALITY === 0 ? Math.min(dpr, 1) * 0.75 : QUALITY === 1 ? Math.min(dpr, 1.25) : Math.min(dpr, 1.75);
 }
 let canvasSide = 0, canvasSc = 0;
 function sizeCoreCanvas() {
-  const side = Math.ceil(84 * 7 * uiScale('orb')), sc = renderScale();
+  const side = Math.ceil(84 * 7.4 * uiScale('orb')), sc = renderScale();
   if (side === canvasSide && sc === canvasSc) return;
   canvasSide = side; canvasSc = sc;
   cv.style.width = cv.style.height = side + 'px';
@@ -288,17 +288,15 @@ function roundedPoly(g, pts) {          // closed polygon, each point [x, y, cor
 }
 function glowStroke(g, R, w, draw) {     // white glow underneath, black line on top
   g.save();
-  g.shadowColor = 'rgba(255,255,255,0.95)'; g.shadowBlur = R * 0.4;
+  if (QUALITY > 0) { g.shadowColor = 'rgba(255,255,255,0.95)'; g.shadowBlur = R * 0.4; }
   g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = w * 1.7; draw(); g.stroke();
   g.shadowColor = 'transparent'; g.shadowBlur = 0;
   g.strokeStyle = INK; g.lineWidth = w; draw(); g.stroke();
   g.restore();
 }
-function drawFace(R, t, dt, st, lv, c, alpha, cm) {
-  const g = ctx, sc = canvasSc, mid = canvasSide / 2;
-  g.setTransform(sc, 0, 0, sc, 0, 0);
-  g.clearRect(0, 0, canvasSide, canvasSide);
-  g.save(); g.translate(mid, mid);
+function drawFaceParts(R, t, dt, st, lv, c, alpha, cm) {   // origin = the middle of the face (the caller positions and tilts it)
+  const g = ctx;
+  g.save();
   const F = FACE, speaking = st === 'speaking', listening = st === 'listening' || pttActive, thinking = st === 'thinking', loading = st === 'loading';
   const raw = speaking ? Math.min(1, lv * 1.35) : 0;
   const dip = F.lastLv - raw > 0.18; F.lastLv = raw;            // quick dip = a consonant: snap the mouth mostly shut
@@ -317,7 +315,7 @@ function drawFace(R, t, dt, st, lv, c, alpha, cm) {
 
   // eyes: tall cartoon ovals with a sparkle; they glance up and aside while thinking
   const ex = R * 0.62, ey = -R * 0.25, ew = R * 0.2, eh = R * (0.34 + 0.05 * F.brow) * (1 - 0.9 * lid);
-  const lx = F.look * R * 0.1 + Math.sin(t * 0.7) * R * 0.02, ly = -F.look * R * 0.1;
+  const lx = F.look * R * 0.1 + Math.sin(t * 0.7) * R * 0.02 + POSE[6] * R * 0.14, ly = -F.look * R * 0.1;
   for (const s of [-1, 1]) {
     const x = s * ex + lx, y = ey + ly, h = Math.max(2.5, eh);
     g.save(); g.shadowColor = 'rgba(255,255,255,0.95)'; g.shadowBlur = R * 0.3;
@@ -345,7 +343,7 @@ function drawFace(R, t, dt, st, lv, c, alpha, cm) {
   } else if (thinking) {
     glowStroke(g, R, lw, () => { g.beginPath(); g.moveTo(-R * 0.26, my); g.lineTo(R * 0.26, my + R * 0.04); });
   } else {
-    const sm = R * (listening ? 0.08 : 0.26);
+    const sm = R * (listening ? 0.08 : CHAR.dancing ? 0.42 : 0.26);
     glowStroke(g, R, lw, () => { g.beginPath(); g.moveTo(-R * 0.4, my - sm * 0.2); g.quadraticCurveTo(0, my + sm * 1.5, R * 0.4, my - sm * 0.2); });
   }
 
@@ -363,6 +361,152 @@ function drawFace(R, t, dt, st, lv, c, alpha, cm) {
       g.beginPath(); g.arc(0, 0, R * (1.6 + ph * 0.7), 0, TAU); g.stroke();
     }
   }
+  g.restore();
+}
+
+
+// ---------- the body: a stick-and-rounded-box cartoon figure under the face, posed with simple 2-bone limbs ----------
+// POSE (all in units of R): [bodyX, bodyY, lean, headX, headY, headTilt, gaze, leftHand x,y, rightHand x,y, leftFoot x,y, rightFoot x,y]
+const REST = [0, 0, 0, 0, 0, 0, 0, -1.15, 3.4, 1.15, 3.4, -0.5, 4.4, 0.5, 4.4];
+const POSE = Float32Array.from(REST), TGT = new Float32Array(15), VEL = new Float32Array(15);
+// spring stiffness per channel: the body leads, the head and hands follow a beat later, so motion flows instead of snapping
+const STIFF = [90, 90, 70, 60, 60, 55, 40, 45, 45, 45, 45, 120, 120, 120, 120];
+const CHAR = { busy: false, dancing: false, gest: null, next: 4, last: '' };
+const sstep = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
+const GESTURES = ['wave', 'scratch', 'hips', 'shrug', 'look', 'stretch', 'point', 'shift', 'look', 'hips'];
+const GDUR = { wave: 2.6, scratch: 2.2, hips: 4, shrug: 1.6, look: 3.4, stretch: 2.8, point: 2, shift: 3.2 };
+
+function ik(sx, sy, tx, ty, l1, l2, s) {        // two-bone limb from (sx,sy) toward (tx,ty); the bend points outward (s = side)
+  let dx = tx - sx, dy = ty - sy, d = Math.hypot(dx, dy) || 1e-3;
+  const reach = l1 + l2 - 1e-3;
+  if (d > reach) { tx = sx + dx / d * reach; ty = sy + dy / d * reach; d = reach; }
+  const a = Math.atan2(ty - sy, tx - sx), A = Math.acos(Math.max(-1, Math.min(1, (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d))));
+  const e1 = [sx + Math.cos(a + A) * l1, sy + Math.sin(a + A) * l1], e2 = [sx + Math.cos(a - A) * l1, sy + Math.sin(a - A) * l1];
+  const e = s * e1[0] > s * e2[0] ? e1 : e2;
+  return [e[0], e[1], tx, ty];
+}
+
+function setPoseTargets(t, st, dancing, bass) {
+  const T = TGT; for (let i = 0; i < 15; i++) T[i] = REST[i];
+  const speaking = st === 'speaking', listening = st === 'listening' || pttActive, thinking = st === 'thinking';
+  // standing: breathing and a slow weight shift, always
+  T[1] += 0.014 * Math.sin(t * 1.8); T[0] += 0.04 * Math.sin(t * 0.55); T[5] += 0.012 * Math.sin(t * 0.8);
+  CHAR.dancing = dancing;
+  let busy = dancing || speaking || listening || thinking;
+  if (dancing) {
+    const ph = t * TAU * 2, A = 0.65 + Math.min(0.6, bass * 1.6), h = ph / 2, sn = Math.sin(ph), cs = Math.cos(ph), sh = Math.sin(h);
+    const style = Math.floor(t / 7) % 5;
+    T[1] += 0.1 * A * (0.5 + 0.5 * cs); T[4] += 0.03 * A * cs; T[5] += 0.12 * sh;
+    if (style === 0) {            // pump the arms
+      T[7] = -1.35; T[8] = 2.3 - 1.4 * (0.5 + 0.5 * sn); T[9] = 1.35; T[10] = 2.3 - 1.4 * (0.5 - 0.5 * sn);
+      T[0] += 0.14 * sh; T[12] -= 0.2 * (0.5 + 0.5 * sh); T[14] -= 0.2 * (0.5 - 0.5 * sh);
+    } else if (style === 1) {     // hands in the air, swaying
+      T[7] = -(0.9 + 0.3 * sh); T[8] = -1.1 + 0.25 * cs; T[9] = 0.9 - 0.3 * sh; T[10] = -1.1 - 0.25 * cs;
+      T[0] += 0.25 * sh; T[2] = 0.1 * sh;
+    } else if (style === 2) {     // disco point
+      const s = Math.tanh(sh * 4);
+      { const u = 0.5 + 0.5 * s, v = 1 - u; T[9] = 1.05 + 0.75 * u; T[10] = 2.75 - 3.75 * u; T[7] = -1.05 - 0.75 * v; T[8] = 2.75 - 3.75 * v; }
+      T[0] += 0.2 * sn; T[2] = 0.08 * s; T[6] = 0.5 * s;
+    } else if (style === 3) {     // shuffle: alternate feet, arms pumping low
+      T[12] -= 0.4 * (0.5 + 0.5 * sn); T[14] -= 0.4 * (0.5 - 0.5 * sn);
+      T[7] = -1.2; T[8] = 2.5 + 0.45 * sn; T[9] = 1.2; T[10] = 2.5 - 0.45 * sn; T[0] += 0.1 * sn;
+    } else {                      // sweep the arms side to side
+      T[7] = -1.8; T[8] = 1.5 + 1.0 * sh; T[9] = 1.8; T[10] = 1.5 - 1.0 * sh; T[0] += 0.15 * sh; T[6] = 0.4 * sh;
+    }
+  } else if (speaking) {
+    const a = Math.min(1, FACE.open * 2 + 0.35);
+    T[9] = 1.2 + 0.28 * a * Math.sin(t * 3.1); T[10] = 3.0 - 0.9 * a + 0.35 * a * Math.sin(t * 2.3 + 1);
+    T[7] = -1.2 + 0.2 * a * Math.sin(t * 2.7 + 2); T[8] = 3.1 - 0.6 * a + 0.3 * a * Math.sin(t * 2.9);
+    T[0] += 0.05 * Math.sin(t * 1.3);
+  } else if (listening) {
+    T[9] = 1.1; T[10] = 0.2 + 0.04 * Math.sin(t * 2); T[5] += 0.07; T[2] = 0.03;
+  } else if (thinking) {
+    T[9] = 0.4; T[10] = 1.4; T[7] = 0.95; T[8] = 2.45; T[5] -= 0.08;
+  } else if (st === 'idle') {
+    // an occasional small gesture, like someone standing around
+    if (!CHAR.gest && t > CHAR.next) {
+      let n; do { n = GESTURES[(Math.random() * GESTURES.length) | 0]; } while (n === CHAR.last);
+      CHAR.gest = { n, t0: t, d: GDUR[n] }; CHAR.last = n;
+    }
+    const G = CHAR.gest;
+    if (G) {
+      const p = (t - G.t0) / G.d;
+      if (p >= 1) { CHAR.gest = null; CHAR.next = t + 2.5 + Math.random() * 4.5; }
+      else {
+        busy = true;
+        const e = sstep(p / 0.2) * sstep((1 - p) / 0.2), L = (a, b) => a + (b - a) * e;
+        switch (G.n) {
+          case 'wave': T[9] = L(T[9], 1.55 + 0.3 * Math.sin(t * 11)); T[10] = L(T[10], 0.2); T[6] = 0.5 * e; T[5] += 0.06 * e; break;
+          case 'scratch': T[9] = L(T[9], 0.7 + 0.12 * Math.sin(t * 14)); T[10] = L(T[10], -1.15); T[5] += 0.08 * e; break;
+          case 'hips': T[7] = L(T[7], -1.05); T[8] = L(T[8], 2.75); T[9] = L(T[9], 1.05); T[10] = L(T[10], 2.75); break;
+          case 'shrug': T[7] = L(T[7], -1.5); T[8] = L(T[8], 2.5); T[9] = L(T[9], 1.5); T[10] = L(T[10], 2.5); T[1] -= 0.05 * e; T[5] -= 0.1 * e; break;
+          case 'look': T[6] = Math.sin(p * TAU) * e; T[3] = 0.08 * T[6]; T[5] += 0.04 * T[6]; break;
+          case 'stretch': T[7] = L(T[7], -0.75); T[8] = L(T[8], -1.5); T[9] = L(T[9], 0.75); T[10] = L(T[10], -1.5); T[1] -= 0.07 * e; break;
+          case 'point': T[9] = L(T[9], 2.0); T[10] = L(T[10], 1.6); T[6] = 0.8 * e; T[7] = L(T[7], -1.05); T[8] = L(T[8], 2.75); break;
+          case 'shift': T[0] += 0.22 * e * Math.sin(p * TAU); T[12] -= 0.16 * e * Math.max(0, Math.sin(t * 8)); break;
+        }
+      }
+    }
+  }
+  if (!busy && !CHAR.gest && CHAR.next - t > 20) CHAR.next = t + 3;
+  CHAR.busy = busy;
+}
+
+function drawFace(R, t, dt, st, lv, c, alpha, cm) {     // draws the whole character
+  const g = ctx, sc = canvasSc, mid = canvasSide / 2;
+  g.setTransform(sc, 0, 0, sc, 0, 0);
+  g.clearRect(0, 0, canvasSide, canvasSide);
+  let bass = (S.specShown[0] + S.specShown[1] + S.specShown[2]) / 3, en = 0;
+  for (let i = 0; i < 40; i++) en += S.specShown[i];
+  const dancing = st === 'idle' && !S.followup && !pttActive && (!!(S.sp && S.sp.playing) || en > 0.6);
+  setPoseTargets(t, st, dancing, bass);
+  let left = Math.min(0.1, dt);                              // slightly under-damped springs, stepped finely so they stay stable
+  while (left > 1e-4) {
+    const h = Math.min(left, 1 / 90); left -= h;
+    for (let i = 0; i < 15; i++) {
+      const kk = STIFF[i] * (dancing ? 1.35 : 1);
+      VEL[i] += (kk * (TGT[i] - POSE[i]) - 2 * 0.72 * Math.sqrt(kk) * VEL[i]) * h;
+      POSE[i] += VEL[i] * h;
+    }
+  }
+  const P = POSE, lw = Math.max(3, R * 0.09);
+  g.save(); g.translate(mid, mid - R * 1.5);               // the figure's middle is just under the face
+  g.lineJoin = g.lineCap = 'round';
+  const bx = P[0] * R, by = P[1] * R;
+
+  // ground shadow, then the legs (feet stay planted, so the knees bend when the body drops)
+  g.fillStyle = 'rgba(255,255,255,0.07)'; g.beginPath(); g.ellipse(0, 4.55 * R, 1.5 * R, 0.17 * R, 0, 0, TAU); g.fill();
+  const legs = new Path2D();
+  for (const s of [-1, 1]) {
+    const hx = s * 0.2 * R + bx, hy = 3.0 * R + by, j = ik(hx, hy, P[s < 0 ? 11 : 13] * R, P[s < 0 ? 12 : 14] * R, 0.8 * R, 0.8 * R, s);
+    legs.moveTo(hx, hy); legs.lineTo(j[0], j[1]); legs.lineTo(j[2], j[3]); legs.lineTo(j[2] + s * 0.3 * R, j[3]);
+  }
+  legs.moveTo(-0.2 * R + bx, 3.0 * R + by); legs.lineTo(0.2 * R + bx, 3.0 * R + by);
+  glowPath(g, R, lw, legs);
+
+  // upper body: a single spine, leaning about the hips; arms hang from the shoulders
+  g.save(); g.translate(bx, by + 3.0 * R); g.rotate(P[2]); g.translate(0, -3.0 * R);
+  const up = new Path2D();
+  up.moveTo(0, 1.4 * R); up.lineTo(0, 3.0 * R);                         // neck and spine
+  up.moveTo(-0.16 * R, 1.72 * R); up.lineTo(0.16 * R, 1.72 * R);        // shoulders
+  for (const s of [-1, 1]) {
+    const sx = s * 0.16 * R, sy = 1.72 * R, j = ik(sx, sy, P[s < 0 ? 7 : 9] * R, P[s < 0 ? 8 : 10] * R, 1.05 * R, 1.0 * R, s);
+    up.moveTo(sx, sy); up.lineTo(j[0], j[1]); up.lineTo(j[2], j[3]);
+  }
+  glowPath(g, R, lw, up);
+  // head: slides and tilts a little on the neck
+  g.translate(P[3] * R, P[4] * R); g.translate(0, 1.3 * R); g.rotate(P[5]); g.translate(0, -1.3 * R);
+  drawFaceParts(R, t, dt, st, lv, c, alpha, cm);
+  g.restore();
+  g.restore();
+}
+
+function glowPath(g, R, w, path) {
+  g.save();
+  if (QUALITY > 0) { g.shadowColor = 'rgba(255,255,255,0.95)'; g.shadowBlur = R * 0.4; }
+  g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = w * 1.7; g.stroke(path);
+  g.shadowColor = 'transparent'; g.shadowBlur = 0;
+  g.strokeStyle = INK; g.lineWidth = w; g.stroke(path);
   g.restore();
 }
 
@@ -578,7 +722,7 @@ function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
 let lastDraw = 0;
 function frame(ms) {
   const hidden = $('hud').classList.contains('hidden');
-  const quiet = S.state === 'idle' && !S.followup && !pttActive;
+  const quiet = S.state === 'idle' && !S.followup && !pttActive && !CHAR.busy;
   const fps = hidden ? 2 : (quiet ? FPS_IDLE[QUALITY] : FPS_ACTIVE[QUALITY]);
   if (ms - lastDraw < 1000 / fps - 3) { requestAnimationFrame(frame); return; }
   lastDraw = ms;
@@ -712,7 +856,7 @@ const applyAny = (id) => (id === 'orb' ? (sizeCoreCanvas(), saveUI()) : applyUI(
 // ---------- mouse: hold-to-talk, drag to move ----------
 const interactive = { on: false };
 function setInteractive(on) { if (interactive.on !== on) { interactive.on = on; window.jarvis.setInteractive(on); } }
-const overOrb = (x, y) => Math.hypot(x - orbNow.x, y - orbNow.y) < orbNow.R * 1.9;
+const overOrb = (x, y) => Math.abs(x - orbNow.x) < orbNow.R * 1.7 && Math.abs(y - orbNow.y) < orbNow.R * 3.2;   // the whole character
 let dragging = null;
 
 document.addEventListener('mousemove', (e) => {
