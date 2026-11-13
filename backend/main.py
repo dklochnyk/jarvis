@@ -118,7 +118,7 @@ def demo_loop(hub):
                 if src:
                     t = time.time() - t0
                     v = max(0, 0.45 + 0.4 * math.sin(t * 9) * math.sin(t * 2.3) + random.uniform(-0.15, 0.15))
-                    hub.emit(type="level", source=src, value=min(1, v))
+                    hub.emit(type="level", source=src, value=min(1, v), tone=0.5 + 0.5 * math.sin(t * 5))
                 time.sleep(0.05)
 
 

@@ -44,6 +44,20 @@ def load_settings():
     return cfg, key
 
 
+def _tone(pcm, rate=OUT_RATE):
+    """0 = dark, round sounds (oo, oh) .. 1 = bright, wide sounds (ee, ss); used to shape the mouth on the HUD face."""
+    import numpy as np
+
+    if len(pcm) < 64:
+        return 0.5
+    x = pcm.astype(np.float32) * np.hanning(len(pcm))
+    mag = np.abs(np.fft.rfft(x))
+    f = np.fft.rfftfreq(len(x), 1.0 / rate)
+    lo = mag[(f >= 200) & (f < 1000)].sum()
+    hi = mag[(f >= 1500) & (f < 4500)].sum()
+    return round(float(hi / (hi + lo + 1e-6)), 2)
+
+
 class _Audio:
     """The audio interface the ElevenLabs SDK wants; the real work happens in CloudJarvis so that one
     microphone stream can serve both the wake word and the live conversation."""
@@ -137,7 +151,8 @@ class CloudJarvis:
             chunk = self.out_q.get()
             try:
                 self.out_stream.write(chunk)
-                self.emit(type="level", source="tts", value=voice.level(voice.rms(np.frombuffer(chunk, dtype=np.int16))))
+                pcm = np.frombuffer(chunk, dtype=np.int16)
+                self.emit(type="level", source="tts", value=voice.level(voice.rms(pcm)), tone=_tone(pcm))
             except Exception:
                 pass
 

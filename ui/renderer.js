@@ -58,7 +58,7 @@ function handle(m) {
       setState(m.state, !!m.followup);
       if (m.state === 'idle') fadeCaptionSoon();
       break;
-    case 'level': S.target = Math.max(S.target, m.value); break;
+    case 'level': S.target = Math.max(S.target, m.value); if (m.source === 'tts' && m.tone != null) FACE.tTarget = m.tone; break;
     case 'transcript':
       showCaption();
       if (m.role === 'user') { S.exec = false; S.planned = false; }
@@ -272,92 +272,95 @@ function hexCluster(g, x, y, s, fillCol) {
 }
 
 
-// ---------- the face: a simple cartoon head; the mouth moves with the voice ----------
-const FACE = { open: 0, blink: 0, nextBlink: 2, look: 0, smile: 0.6, brow: 0, think: 0 };
+// ---------- the face: just eyes, brows, nose and mouth, black line with a soft white glow; the mouth follows the voice ----------
+// open = how loud (jaw), tone = bright/dark sound (0 round "oo/oh" .. 1 wide "ee/ss"), both from the speech audio itself
+const FACE = { open: 0, tone: 0.5, tTarget: 0.5, blink: 0, nextBlink: 2, look: 0, brow: 0, lastLv: 0 };
+const INK = '#0d0d0f';
+function roundedPoly(g, pts) {          // closed polygon, each point [x, y, cornerRadius]
+  const n = pts.length;
+  const mx = (pts[n - 1][0] + pts[0][0]) / 2, my = (pts[n - 1][1] + pts[0][1]) / 2;
+  g.moveTo(mx, my);
+  for (let i = 0; i < n; i++) {
+    const p = pts[i], q = pts[(i + 1) % n];
+    g.arcTo(p[0], p[1], q[0], q[1], p[2]);
+  }
+  g.closePath();
+}
+function glowStroke(g, R, w, draw) {     // white glow underneath, black line on top
+  g.save();
+  g.shadowColor = 'rgba(255,255,255,0.95)'; g.shadowBlur = R * 0.4;
+  g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = w * 1.7; draw(); g.stroke();
+  g.shadowColor = 'transparent'; g.shadowBlur = 0;
+  g.strokeStyle = INK; g.lineWidth = w; draw(); g.stroke();
+  g.restore();
+}
 function drawFace(R, t, dt, st, lv, c, alpha, cm) {
   const g = ctx, sc = canvasSc, mid = canvasSide / 2;
   g.setTransform(sc, 0, 0, sc, 0, 0);
   g.clearRect(0, 0, canvasSide, canvasSide);
   g.save(); g.translate(mid, mid);
   const F = FACE, speaking = st === 'speaking', listening = st === 'listening' || pttActive, thinking = st === 'thinking', loading = st === 'loading';
-  const talk = speaking ? Math.min(1, lv * 1.25) : 0;
-  // mouth opening follows the voice level (a little jitter keeps it lively), eased so it looks like talking
-  const wantOpen = speaking ? Math.min(1, talk * (0.75 + 0.25 * Math.sin(t * 17))) : listening ? 0.12 + lv * 0.25 : 0;
-  F.open += (wantOpen - F.open) * (wantOpen > F.open ? 0.6 : 0.3);
-  F.smile += ((speaking ? 0.3 : listening ? 0.1 : thinking ? 0 : 0.6) - F.smile) * 0.12;
+  const raw = speaking ? Math.min(1, lv * 1.35) : 0;
+  const dip = F.lastLv - raw > 0.18; F.lastLv = raw;            // quick dip = a consonant: snap the mouth mostly shut
+  const wantOpen = speaking ? (dip ? raw * 0.3 : raw) : listening ? 0.08 + lv * 0.2 : 0;
+  F.open += (wantOpen - F.open) * (wantOpen > F.open ? 0.75 : 0.5);
+  F.tone += (F.tTarget - F.tone) * 0.5;
   F.look += ((thinking ? 1 : 0) - F.look) * 0.1;
   F.brow += ((listening ? 1 : thinking ? -0.5 : 0) - F.brow) * 0.12;
   if (t > F.nextBlink) { F.blink = 1; F.nextBlink = t + 2 + Math.random() * 3.5; }
   F.blink = Math.max(0, F.blink - dt * 7);
-  const lid = loading ? 0.9 : Math.sin(F.blink * Math.PI);           // 0 open .. 1 closed
-  const bob = Math.sin(t * (speaking ? 7 : 1.6)) * R * (speaking ? 0.02 : 0.015) - F.open * R * 0.02;
-  const FR = R * 1.45;                                                 // head radius
+  const lid = loading ? 0.85 : Math.sin(F.blink * Math.PI);
+  const bob = Math.sin(t * (speaking ? 7 : 1.6)) * R * (speaking ? 0.02 : 0.015) - F.open * R * 0.03;
+  const lw = Math.max(3, R * 0.09);
   g.translate(0, bob);
   g.lineJoin = g.lineCap = 'round';
 
-  // soft glow behind the head in the state colour
-  let gr = g.createRadialGradient(0, 0, FR * 0.8, 0, 0, FR * 1.7);
-  gr.addColorStop(0, rgba(c, 0.35 * alpha)); gr.addColorStop(1, rgba(c, 0));
-  g.fillStyle = gr; g.beginPath(); g.arc(0, 0, FR * 1.7, 0, TAU); g.fill();
-
-  // head
-  gr = g.createRadialGradient(-FR * 0.3, -FR * 0.35, FR * 0.1, 0, 0, FR);
-  gr.addColorStop(0, rgba([Math.min(255, c[0] * 0.5 + 150), Math.min(255, c[1] * 0.5 + 150), Math.min(255, c[2] * 0.5 + 150)], 0.98));
-  gr.addColorStop(1, rgba([c[0] * 0.6 + 40, c[1] * 0.6 + 40, c[2] * 0.6 + 40], 0.98));
-  g.fillStyle = gr; g.beginPath(); g.arc(0, 0, FR, 0, TAU); g.fill();
-  g.lineWidth = Math.max(2.5, R * 0.07); g.strokeStyle = '#0b1722'; g.stroke();
-
-  // eyes
-  const ex = FR * 0.4, ey = -FR * 0.15, ew = FR * 0.17, eh = FR * (0.24 + 0.05 * F.brow) * (1 - 0.92 * lid);
-  const lx = F.look * FR * 0.06 + Math.sin(t * 0.7) * FR * 0.015, ly = -F.look * FR * 0.05;
+  // eyes: tall cartoon ovals with a sparkle; they glance up and aside while thinking
+  const ex = R * 0.62, ey = -R * 0.25, ew = R * 0.2, eh = R * (0.34 + 0.05 * F.brow) * (1 - 0.9 * lid);
+  const lx = F.look * R * 0.1 + Math.sin(t * 0.7) * R * 0.02, ly = -F.look * R * 0.1;
   for (const s of [-1, 1]) {
-    g.fillStyle = '#ffffff'; g.beginPath(); g.ellipse(s * ex, ey, ew, Math.max(1.5, eh), 0, 0, TAU); g.fill();
-    g.lineWidth = Math.max(2, R * 0.045); g.strokeStyle = '#0b1722'; g.stroke();
-    if (lid < 0.8) {
-      g.fillStyle = '#0b1722'; g.beginPath();
-      g.ellipse(s * ex + lx, ey + ly, ew * 0.5, Math.max(1, Math.min(eh * 0.8, FR * 0.15)), 0, 0, TAU); g.fill();
-      g.fillStyle = '#fff'; g.beginPath(); g.arc(s * ex + lx - ew * 0.15, ey + ly - eh * 0.2, ew * 0.14, 0, TAU); g.fill();
-    }
-    // eyebrows: raised while listening, slanted while thinking
-    g.lineWidth = Math.max(2.5, R * 0.06); g.strokeStyle = '#0b1722'; g.beginPath();
-    const by = ey - eh - FR * 0.12 - F.brow * FR * 0.05, tilt = F.brow < 0 ? -F.brow * FR * 0.1 : 0;
-    g.moveTo(s * ex - ew, by + (s < 0 ? tilt : -tilt)); g.lineTo(s * ex + ew, by + (s < 0 ? -tilt : tilt)); g.stroke();
+    const x = s * ex + lx, y = ey + ly, h = Math.max(2.5, eh);
+    g.save(); g.shadowColor = 'rgba(255,255,255,0.95)'; g.shadowBlur = R * 0.3;
+    g.fillStyle = INK; g.beginPath(); g.ellipse(x, y, ew, h, 0, 0, TAU); g.fill(); g.restore();
+    g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = Math.max(1.5, R * 0.035); g.beginPath(); g.ellipse(x, y, ew, h, 0, 0, TAU); g.stroke();
+    if (lid < 0.6) { g.fillStyle = '#fff'; g.beginPath(); g.arc(x - ew * 0.3, y - h * 0.3, ew * 0.3, 0, TAU); g.fill(); }
+    // eyebrows: raised while listening, slanted (worried) while thinking
+    const by = y - R * 0.55 - F.brow * R * 0.1, tilt = F.brow < 0 ? -F.brow * R * 0.18 : 0;
+    glowStroke(g, R, lw, () => { g.beginPath(); g.moveTo(s * ex - ew * 1.5 + lx, by + (s < 0 ? tilt : -tilt)); g.lineTo(s * ex + ew * 1.5 + lx, by + (s < 0 ? -tilt : tilt)); });
   }
 
-  // cheeks
-  g.fillStyle = 'rgba(255,120,140,0.28)';
-  for (const s of [-1, 1]) { g.beginPath(); g.ellipse(s * FR * 0.62, FR * 0.2, FR * 0.1, FR * 0.06, 0, 0, TAU); g.fill(); }
+  // nose: a small rounded hook
+  glowStroke(g, R, lw * 0.85, () => { g.beginPath(); g.moveTo(R * 0.04, -R * 0.08); g.quadraticCurveTo(-R * 0.1, R * 0.2, -R * 0.1, R * 0.26); g.quadraticCurveTo(-R * 0.03, R * 0.32, R * 0.1, R * 0.28); });
 
-  // mouth
-  const my = FR * 0.38, mw = FR * (0.38 - 0.1 * F.open), open = F.open;
-  g.lineWidth = Math.max(2.5, R * 0.06); g.strokeStyle = '#0b1722';
-  if (open > 0.06) {
-    const mh = FR * (0.04 + 0.4 * open);
-    g.beginPath(); g.ellipse(0, my + mh * 0.2, mw, mh, 0, 0, TAU);
-    g.fillStyle = '#3a0f1c'; g.fill(); g.stroke();
-    g.save(); g.beginPath(); g.ellipse(0, my + mh * 0.2, mw, mh, 0, 0, TAU); g.clip();
-    g.fillStyle = '#ff7b93'; g.beginPath(); g.ellipse(0, my + mh * 1.1, mw * 0.55, mh * 0.55, 0, 0, TAU); g.fill();
+  // mouth: height from loudness, width from tone ("oo" narrow and round, "ee" wide)
+  const o = F.open, tn = F.tone, my = R * 0.78;
+  if (o > 0.07) {
+    const mw = R * (0.3 + 0.32 * tn) * (0.85 + 0.25 * o), mh = R * (0.05 + 0.5 * o * (1 - 0.35 * tn));
+    g.fillStyle = INK; g.beginPath(); g.ellipse(0, my, mw, mh, 0, 0, TAU); g.fill();
+    g.save(); g.beginPath(); g.ellipse(0, my, mw, mh, 0, 0, TAU); g.clip();
+    g.fillStyle = '#d9d9de'; g.beginPath(); g.ellipse(0, my + mh * 0.95, mw * 0.55, mh * 0.5, 0, 0, TAU); g.fill();
+    if (tn > 0.55 && o < 0.6) { g.fillStyle = '#fff'; g.fillRect(-mw, my - mh, mw * 2, mh * 0.45); }     // teeth on "ee/ss"
     g.restore();
-  } else if (thinking) {          // flat wobbly line
-    g.beginPath(); g.moveTo(-mw * 0.7, my);
-    for (let i = 1; i <= 6; i++) g.lineTo(-mw * 0.7 + (i / 6) * mw * 1.4, my + (i % 2 ? -1 : 1) * FR * 0.015);
-    g.stroke();
-  } else {                         // smile
-    const sm = F.smile * FR * 0.22;
-    g.beginPath(); g.moveTo(-mw, my - sm * 0.2); g.quadraticCurveTo(0, my + sm * 1.6, mw, my - sm * 0.2); g.stroke();
+    glowStroke(g, R, lw, () => { g.beginPath(); g.ellipse(0, my, mw, mh, 0, 0, TAU); });
+  } else if (thinking) {
+    glowStroke(g, R, lw, () => { g.beginPath(); g.moveTo(-R * 0.26, my); g.lineTo(R * 0.26, my + R * 0.04); });
+  } else {
+    const sm = R * (listening ? 0.08 : 0.26);
+    glowStroke(g, R, lw, () => { g.beginPath(); g.moveTo(-R * 0.4, my - sm * 0.2); g.quadraticCurveTo(0, my + sm * 1.5, R * 0.4, my - sm * 0.2); });
   }
 
-  // thinking: dots bobbing above the head
   if (thinking) {
-    g.fillStyle = rgba(c, 0.95);
-    for (let i = 0; i < 3; i++) { g.beginPath(); g.arc((i - 1) * FR * 0.28, -FR * 1.3 - Math.abs(Math.sin(t * 4 - i * 0.7)) * FR * 0.12, FR * 0.07, 0, TAU); g.fill(); }
+    for (let i = 0; i < 3; i++) {
+      const x = (i - 1) * R * 0.34, y = -R * 1.35 - Math.abs(Math.sin(t * 4 - i * 0.7)) * R * 0.15;
+      glowStroke(g, R, lw * 0.6, () => { g.beginPath(); g.arc(x, y, R * 0.09, 0, TAU); });
+    }
   }
-  // hold-to-talk ring
   if (S.hold > 0.02) {
+    g.lineWidth = 2;
     for (let i = 0; i < 2; i++) {
       const ph = (t * 1.1 + i * 0.5) % 1;
-      g.strokeStyle = rgba(c, 0.8 * (1 - ph) * S.hold); g.lineWidth = 2;
-      g.beginPath(); g.arc(0, 0, FR * (1.15 + ph * 0.6), 0, TAU); g.stroke();
+      g.strokeStyle = `rgba(255,255,255,${0.8 * (1 - ph) * S.hold})`;
+      g.beginPath(); g.arc(0, 0, R * (1.6 + ph * 0.7), 0, TAU); g.stroke();
     }
   }
   g.restore();
