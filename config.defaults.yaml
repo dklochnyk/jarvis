@@ -6,6 +6,12 @@ gemini_model: auto         # auto = newest Flash model your key can use. Or name
 model: claude-sonnet-5-5   # Claude model id, used when provider is claude
 max_history_messages: 30
 
+# --- Cloud voice mode (agent.bat) -----------------------------------------
+# Runs Jarvis as an ElevenLabs Agent (Claude is the brain, set in the ElevenLabs dashboard).
+# Needs ELEVENLABS_API_KEY in .env. No wake word and no local speech model, so it is light and fast.
+elevenlabs_agent:
+  agent_id: agent_1001m78prmnvfedsbr81jqrvx1mj
+
 # --- Wake word / hotkey -------------------------------------------------
 # Wake phrase is "Hey Jarvis" (openWakeWord pretrained model).
 wake_word: hey_jarvis

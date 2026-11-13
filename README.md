@@ -23,6 +23,15 @@ while a transparent sci-fi HUD floats over your desktop. It can open apps and si
 
 Preview the visuals without a mic or API key: `run.bat demo`.
 
+## Cloud voice mode (lighter and more conversational)
+
+Double-click `agent.bat`. Instead of the local wake word, Whisper and Piper, your mic streams to an
+ElevenLabs Agent (Claude as the brain, your "Jarvis" voice) that listens, replies and can be interrupted in real
+time. The things only your PC can do (open apps, Spotify, volume, windows, timers, files) still run here through the
+same tools. Needs `ELEVENLABS_API_KEY` in `.env`. The agent id is in `config.defaults.yaml` (`elevenlabs_agent`);
+`mic_device` in `settings.yaml` picks the microphone. Personality and the brain model are edited in the ElevenLabs dashboard.
+Timers are lost when you quit. `agent.bat --list` shows the tools the agent can call.
+
 ## Using it
 
 | Do this | Result |

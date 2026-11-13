@@ -13,5 +13,6 @@ pyttsx3
 piper-tts>=1.3
 google-genai
 spotipy>=2.24
+elevenlabs>=2.0
 pycaw; sys_platform == "win32"
 soundcard; sys_platform == "win32"
