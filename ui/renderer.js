@@ -271,6 +271,142 @@ function hexCluster(g, x, y, s, fillCol) {
   g.fillStyle = fillCol; g.beginPath(); for (let k = 0; k <= 6; k++) { const a = (k / 6) * TAU, px = x + Math.cos(a) * s, py = y + Math.sin(a) * s; k ? g.lineTo(px, py) : g.moveTo(px, py); } g.fill();
 }
 
+
+// ---------- the face: a simple cartoon head; the mouth moves with the voice ----------
+const FACE = { open: 0, blink: 0, nextBlink: 2, look: 0, smile: 0.6, brow: 0, think: 0 };
+function drawFace(R, t, dt, st, lv, c, alpha, cm) {
+  const g = ctx, sc = canvasSc, mid = canvasSide / 2;
+  g.setTransform(sc, 0, 0, sc, 0, 0);
+  g.clearRect(0, 0, canvasSide, canvasSide);
+  g.save(); g.translate(mid, mid);
+  const F = FACE, speaking = st === 'speaking', listening = st === 'listening' || pttActive, thinking = st === 'thinking', loading = st === 'loading';
+  const talk = speaking ? Math.min(1, lv * 1.25) : 0;
+  // mouth opening follows the voice level (a little jitter keeps it lively), eased so it looks like talking
+  const wantOpen = speaking ? Math.min(1, talk * (0.75 + 0.25 * Math.sin(t * 17))) : listening ? 0.12 + lv * 0.25 : 0;
+  F.open += (wantOpen - F.open) * (wantOpen > F.open ? 0.6 : 0.3);
+  F.smile += ((speaking ? 0.3 : listening ? 0.1 : thinking ? 0 : 0.6) - F.smile) * 0.12;
+  F.look += ((thinking ? 1 : 0) - F.look) * 0.1;
+  F.brow += ((listening ? 1 : thinking ? -0.5 : 0) - F.brow) * 0.12;
+  if (t > F.nextBlink) { F.blink = 1; F.nextBlink = t + 2 + Math.random() * 3.5; }
+  F.blink = Math.max(0, F.blink - dt * 7);
+  const lid = loading ? 0.9 : Math.sin(F.blink * Math.PI);           // 0 open .. 1 closed
+  const bob = Math.sin(t * (speaking ? 7 : 1.6)) * R * (speaking ? 0.02 : 0.015) - F.open * R * 0.02;
+  const FR = R * 1.45;                                                 // head radius
+  g.translate(0, bob);
+  g.lineJoin = g.lineCap = 'round';
+
+  // soft glow behind the head in the state colour
+  let gr = g.createRadialGradient(0, 0, FR * 0.8, 0, 0, FR * 1.7);
+  gr.addColorStop(0, rgba(c, 0.35 * alpha)); gr.addColorStop(1, rgba(c, 0));
+  g.fillStyle = gr; g.beginPath(); g.arc(0, 0, FR * 1.7, 0, TAU); g.fill();
+
+  // head
+  gr = g.createRadialGradient(-FR * 0.3, -FR * 0.35, FR * 0.1, 0, 0, FR);
+  gr.addColorStop(0, rgba([Math.min(255, c[0] * 0.5 + 150), Math.min(255, c[1] * 0.5 + 150), Math.min(255, c[2] * 0.5 + 150)], 0.98));
+  gr.addColorStop(1, rgba([c[0] * 0.6 + 40, c[1] * 0.6 + 40, c[2] * 0.6 + 40], 0.98));
+  g.fillStyle = gr; g.beginPath(); g.arc(0, 0, FR, 0, TAU); g.fill();
+  g.lineWidth = Math.max(2.5, R * 0.07); g.strokeStyle = '#0b1722'; g.stroke();
+
+  // eyes
+  const ex = FR * 0.4, ey = -FR * 0.15, ew = FR * 0.17, eh = FR * (0.24 + 0.05 * F.brow) * (1 - 0.92 * lid);
+  const lx = F.look * FR * 0.06 + Math.sin(t * 0.7) * FR * 0.015, ly = -F.look * FR * 0.05;
+  for (const s of [-1, 1]) {
+    g.fillStyle = '#ffffff'; g.beginPath(); g.ellipse(s * ex, ey, ew, Math.max(1.5, eh), 0, 0, TAU); g.fill();
+    g.lineWidth = Math.max(2, R * 0.045); g.strokeStyle = '#0b1722'; g.stroke();
+    if (lid < 0.8) {
+      g.fillStyle = '#0b1722'; g.beginPath();
+      g.ellipse(s * ex + lx, ey + ly, ew * 0.5, Math.max(1, Math.min(eh * 0.8, FR * 0.15)), 0, 0, TAU); g.fill();
+      g.fillStyle = '#fff'; g.beginPath(); g.arc(s * ex + lx - ew * 0.15, ey + ly - eh * 0.2, ew * 0.14, 0, TAU); g.fill();
+    }
+    // eyebrows: raised while listening, slanted while thinking
+    g.lineWidth = Math.max(2.5, R * 0.06); g.strokeStyle = '#0b1722'; g.beginPath();
+    const by = ey - eh - FR * 0.12 - F.brow * FR * 0.05, tilt = F.brow < 0 ? -F.brow * FR * 0.1 : 0;
+    g.moveTo(s * ex - ew, by + (s < 0 ? tilt : -tilt)); g.lineTo(s * ex + ew, by + (s < 0 ? -tilt : tilt)); g.stroke();
+  }
+
+  // cheeks
+  g.fillStyle = 'rgba(255,120,140,0.28)';
+  for (const s of [-1, 1]) { g.beginPath(); g.ellipse(s * FR * 0.62, FR * 0.2, FR * 0.1, FR * 0.06, 0, 0, TAU); g.fill(); }
+
+  // mouth
+  const my = FR * 0.38, mw = FR * (0.38 - 0.1 * F.open), open = F.open;
+  g.lineWidth = Math.max(2.5, R * 0.06); g.strokeStyle = '#0b1722';
+  if (open > 0.06) {
+    const mh = FR * (0.04 + 0.4 * open);
+    g.beginPath(); g.ellipse(0, my + mh * 0.2, mw, mh, 0, 0, TAU);
+    g.fillStyle = '#3a0f1c'; g.fill(); g.stroke();
+    g.save(); g.beginPath(); g.ellipse(0, my + mh * 0.2, mw, mh, 0, 0, TAU); g.clip();
+    g.fillStyle = '#ff7b93'; g.beginPath(); g.ellipse(0, my + mh * 1.1, mw * 0.55, mh * 0.55, 0, 0, TAU); g.fill();
+    g.restore();
+  } else if (thinking) {          // flat wobbly line
+    g.beginPath(); g.moveTo(-mw * 0.7, my);
+    for (let i = 1; i <= 6; i++) g.lineTo(-mw * 0.7 + (i / 6) * mw * 1.4, my + (i % 2 ? -1 : 1) * FR * 0.015);
+    g.stroke();
+  } else {                         // smile
+    const sm = F.smile * FR * 0.22;
+    g.beginPath(); g.moveTo(-mw, my - sm * 0.2); g.quadraticCurveTo(0, my + sm * 1.6, mw, my - sm * 0.2); g.stroke();
+  }
+
+  // thinking: dots bobbing above the head
+  if (thinking) {
+    g.fillStyle = rgba(c, 0.95);
+    for (let i = 0; i < 3; i++) { g.beginPath(); g.arc((i - 1) * FR * 0.28, -FR * 1.3 - Math.abs(Math.sin(t * 4 - i * 0.7)) * FR * 0.12, FR * 0.07, 0, TAU); g.fill(); }
+  }
+  // hold-to-talk ring
+  if (S.hold > 0.02) {
+    for (let i = 0; i < 2; i++) {
+      const ph = (t * 1.1 + i * 0.5) % 1;
+      g.strokeStyle = rgba(c, 0.8 * (1 - ph) * S.hold); g.lineWidth = 2;
+      g.beginPath(); g.arc(0, 0, FR * (1.15 + ph * 0.6), 0, TAU); g.stroke();
+    }
+  }
+  g.restore();
+}
+
+// ---------- the sound line: a white line across the bottom, sound rises above and below it ----------
+const vcv = $('vc'), vctx = vcv.getContext('2d');
+const VN = 72, vbars = new Float32Array(VN);
+let vSc = 0;
+function drawVis(t, st, lv) {
+  const el = $('vis');
+  const w = 620, h = 120, sc = renderScale();
+  if (sc !== vSc) { vSc = sc; vcv.width = Math.round(w * sc); vcv.height = Math.round(h * sc); }
+  const g = vctx;
+  g.setTransform(sc, 0, 0, sc, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const speech = st === 'listening' || st === 'speaking' || pttActive;
+  let en = 0; for (let i = 0; i < 40; i++) en += S.specShown[i];
+  const music = !speech && en > 0.4;
+  const mid = h / 2, half = h / 2 - 6;
+  let sum = 0;
+  for (let i = 0; i < VN; i++) {
+    const f = (i + 0.5) / VN, d = Math.abs(f - 0.5) * 2;                  // 0 centre .. 1 edge
+    let want = 0;
+    if (speech) {
+      const wob = 0.3 + 0.7 * Math.abs(Math.sin(i * 0.9 + t * 9) * Math.cos(i * 0.37 - t * 4.3));
+      want = lv * wob * (0.35 + 0.65 * Math.exp(-d * d * 3));
+    } else if (music) {
+      want = Math.min(1, S.specShown[Math.min(39, Math.floor(d * 39))] * 1.4);
+    }
+    vbars[i] += (want - vbars[i]) * (want > vbars[i] ? 0.55 : 0.25);
+    sum += vbars[i];
+  }
+  const x0 = 10, x1 = w - 10, step = (x1 - x0) / (VN - 1);
+  g.lineCap = 'round';
+  // the sound: thin white lines up and down from the centre line
+  g.strokeStyle = 'rgba(255,255,255,0.95)'; g.lineWidth = Math.max(1.5, step * 0.38); g.beginPath();
+  for (let i = 0; i < VN; i++) {
+    const len = vbars[i] * half;
+    if (len < 0.8) continue;
+    const x = x0 + i * step;
+    g.moveTo(x, mid - len); g.lineTo(x, mid + len);
+  }
+  g.stroke();
+  // the white line itself
+  g.strokeStyle = 'rgba(255,255,255,' + (0.55 + Math.min(0.4, sum / VN * 2)) + ')'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(x0, mid); g.lineTo(x1, mid); g.stroke();
+}
+
 function drawCore(R, t, dt, st, lv, c, alpha, cm, speed) {
   cycleAccents(t, c);
   const g = ctx, sc = canvasSc, mid = canvasSide / 2, q = QUALITY;
@@ -479,7 +615,9 @@ function frame(ms) {
 
   const speed = st === 'thinking' ? 3.2 : st === 'listening' ? 1.2 : 0.55;
   const alpha = 0.88 + 0.12 * Math.max(k, st === 'loading' ? 0.6 : 0);
-  drawCore(R, t, dt, st, lv, c, alpha, cm, speed);
+  cycleAccents(t, c);
+  drawFace(R, t, dt, st, lv, c, alpha, cm);
+  drawVis(t, st, lv);
 
   requestAnimationFrame(frame);
 }
@@ -522,7 +660,7 @@ tin.addEventListener('blur', () => { window.jarvis.blurInput(); setInteractive(f
 window.jarvis.onFocusInput && window.jarvis.onFocusInput(() => { $('hud').classList.remove('hidden'); showTerm(60000); setTimeout(() => tin.focus(), 90); });
 
 // ---------- movable / scalable panels (right-drag to move, right-hold + scroll to resize) ----------
-const MOVABLE = ['term'];
+const MOVABLE = ['term', 'vis'];
 let UI = {};
 try { UI = JSON.parse(localStorage.getItem('jarvis.ui')) || {}; } catch (e) { UI = {}; }
 const saveUI = () => { try { localStorage.setItem('jarvis.ui', JSON.stringify(UI)); } catch (e) { /* fine */ } };
@@ -559,6 +697,10 @@ let rmb = false, pdrag = null;
 function hitTarget(e) {
   if (overOrb(e.clientX, e.clientY)) return 'orb';
   const p = e.target.closest && e.target.closest('.panel');
+  if (p && p.id === 'vis') {
+    const b = p.getBoundingClientRect(), cy = b.top + b.height / 2, band = Math.max(14, b.height * 0.3);
+    return Math.abs(e.clientY - cy) <= band ? 'vis' : null;
+  }
   if (p && p.id && !p.classList.contains('covered') && (p.id !== 'term' || p.classList.contains('show'))) return p.id;
   return null;
 }
