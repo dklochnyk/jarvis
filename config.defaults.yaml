@@ -11,6 +11,9 @@ max_history_messages: 30
 # Needs ELEVENLABS_API_KEY in .env. No wake word and no local speech model, so it is light and fast.
 elevenlabs_agent:
   agent_id: agent_1001m78prmnvfedsbr81jqrvx1mj
+  wake_word: true            # say "Hey Jarvis" to open a conversation (false = hotkey Ctrl+Alt+J / hold the orb only)
+  idle_seconds: 15           # close the conversation after this many quiet seconds (nothing is sent to the cloud while idle)
+  mute_mic_while_speaking: false   # true if he hears himself on your speakers and cuts himself off (headphones avoid this)
 
 # --- Wake word / hotkey -------------------------------------------------
 # Wake phrase is "Hey Jarvis" (openWakeWord pretrained model).

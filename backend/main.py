@@ -182,14 +182,17 @@ def main():
     for w in config_loader.WARNINGS:
         print(f"WARNING: {w}", flush=True)
     provider = cfg.get("provider", "claude")
+    cloud = (os.environ.get("JARVIS_MODE") or cfg.get("mode") or "local").lower() == "cloud"   # agent.bat sets cloud
     # Use ONLY the keys from .env: ignore stray API-key variables set elsewhere in Windows
-    for var in ("ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"):
+    for var in ("ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "ELEVENLABS_API_KEY"):
         os.environ.pop(var, None)
     load_dotenv(os.path.join(ROOT, ".env"), override=True)
-    keyname = "GEMINI_API_KEY" if provider == "gemini" else "ANTHROPIC_API_KEY"
+    keyname = "ELEVENLABS_API_KEY" if cloud else ("GEMINI_API_KEY" if provider == "gemini" else "ANTHROPIC_API_KEY")
     key = os.environ.get(keyname, "").strip().strip('"').strip("'")
     os.environ[keyname] = key
-    if key:
+    if key and cloud:
+        print(f"Cloud voice mode: {keyname} found in .env ({len(key)} characters)", flush=True)   # never print any part of the key
+    elif key:
         print(f"Using {keyname} from .env: {key[:6]}...{key[-4:]} ({len(key)} characters)", flush=True)
 
     hub = Hub()
@@ -212,9 +215,14 @@ def main():
             print(f"{keyname} is missing or still the placeholder - open .env and paste your key.", file=sys.stderr)
             sys.exit(1)
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        from assistant import Jarvis
+        if cloud:
+            from voice_agent import CloudJarvis
 
-        assistant = Jarvis(cfg, hub.emit)
+            assistant = CloudJarvis(cfg, hub.emit, key)
+        else:
+            from assistant import Jarvis
+
+            assistant = Jarvis(cfg, hub.emit)
         threading.Thread(target=assistant.run, daemon=True).start()
 
     try:
